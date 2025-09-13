@@ -1,9 +1,10 @@
-// VIP FARUK 999 - Secure Application Logic (v9 - Final Logic with all features)
+// VIP FARUK 999 - Secure Application Logic (v10 - Forgot Password Feature Added)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
         this.allUsers = [];
         this.config = CONFIG;
+        this.resetUsername = null; // Used for password reset flow
         this.init();
     }
 
@@ -15,44 +16,137 @@ class VIPAdminPanel {
     async secureFetch(url, options = {}) {
         const fetchOptions = {
             method: options.method || 'GET',
-            headers: { 'Content-Type': 'application/json', 'x-airtable-url': url },
+            headers: { 'Content-Type': 'application/json' },
         };
+        // The proxy adds the airtable url header for API calls, not for password reset
+        if (!url.startsWith('/api/')) {
+            fetchOptions.headers['x-airtable-url'] = url;
+            url = this.config.API.PROXY_URL;
+        }
         if (options.body) { fetchOptions.body = JSON.stringify(options.body); }
-        const response = await fetch(this.config.API.PROXY_URL, fetchOptions);
+
+        const response = await fetch(url, fetchOptions);
         const data = await response.json().catch(() => ({ error: { message: `Server returned status ${response.status}` } }));
         if (!response.ok) { throw new Error(data.error?.message || `An unknown server error occurred.`); }
         return data;
     }
 
     setupEventListeners() {
-        document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = e.target.loginUsername.value.trim();
-            const password = e.target.loginPassword.value;
-            const btn = e.target.querySelector('button');
-            if (!username || !password) return this.showError('Please enter both username and password');
-            btn.disabled = true; btn.querySelector('span').textContent = 'Authenticating...';
-            try {
-                const { success, user, message } = await this.authenticateUser(username, password);
-                if (success) {
-                    this.currentUser = user;
-                    createSession(this.currentUser);
-                    document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('dashboardSection').style.display = 'block';
-                    await this.setupPermissions();
-                    await this.loadUsers();
-                    this.showNotification('Login successful', 'success');
-                } else { this.showError(message); }
-            } catch (error) { this.showError(`Login failed: ${error.message}`); }
-            finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
-        });
+        // Login Form
+        document.getElementById('loginForm')?.addEventListener('submit', (e) => this.handleLogin(e));
+
+        // Create User Form
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
         document.getElementById('accountType')?.addEventListener('change', () => { this.updateFormVisibility(); this.updateCreateButtonText(); });
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
+
+        // Forgot Password Modal
+        document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => { e.preventDefault(); this.openResetModal(); });
+        document.getElementById('closeModalBtn')?.addEventListener('click', () => this.closeResetModal());
+        document.getElementById('resetPasswordModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) this.closeResetModal(); });
+        document.getElementById('requestOtpForm')?.addEventListener('submit', (e) => this.handleRequestOtp(e));
+        document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleResetPassword(e));
     }
 
+    async handleLogin(e) {
+        e.preventDefault();
+        const username = e.target.loginUsername.value.trim();
+        const password = e.target.loginPassword.value;
+        const btn = e.target.querySelector('button');
+        if (!username || !password) return this.showError('Please enter both username and password');
+        btn.disabled = true; btn.querySelector('span').textContent = 'Authenticating...';
+        try {
+            const { success, user, message } = await this.authenticateUser(username, password);
+            if (success) {
+                this.currentUser = user;
+                createSession(this.currentUser);
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('dashboardSection').style.display = 'block';
+                await this.setupPermissions();
+                await this.loadUsers();
+                this.showNotification('Login successful', 'success');
+            } else { this.showError(message); }
+        } catch (error) { this.showError(`Login failed: ${error.message}`); }
+        finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
+    }
+
+    // --- FORGOT PASSWORD METHODS ---
+    openResetModal() {
+        document.getElementById('resetPasswordModal').style.display = 'flex';
+        document.getElementById('resetStep1').style.display = 'block';
+        document.getElementById('resetStep2').style.display = 'none';
+        document.getElementById('requestOtpForm').reset();
+        document.getElementById('verifyOtpForm').reset();
+        document.getElementById('resetError').style.display = 'none';
+    }
+
+    closeResetModal() {
+        document.getElementById('resetPasswordModal').style.display = 'none';
+    }
+
+    showResetError(message) {
+        const el = document.getElementById('resetError');
+        el.textContent = message;
+        el.style.display = 'block';
+    }
+
+    async handleRequestOtp(e) {
+        e.preventDefault();
+        this.showResetError('');
+        const form = e.target;
+        const btn = form.querySelector('button');
+        const username = form.resetUsername.value.trim();
+        const telegramId = form.telegramId.value.trim();
+        if (!username || !telegramId) return this.showResetError('Username and Telegram ID are required.');
+        
+        this.resetUsername = username; // Store username for the next step
+        btn.disabled = true; btn.querySelector('span').textContent = 'Sending...';
+
+        try {
+            const data = await this.secureFetch('/api/password-reset', {
+                method: 'POST',
+                body: { username, telegramId }
+            });
+            this.showNotification(data.message, 'success');
+            document.getElementById('resetStep1').style.display = 'none';
+            document.getElementById('resetStep2').style.display = 'block';
+        } catch (error) {
+            this.showResetError(error.message);
+        } finally {
+            btn.disabled = false; btn.querySelector('span').textContent = 'Send OTP';
+        }
+    }
+
+    async handleResetPassword(e) {
+        e.preventDefault();
+        this.showResetError('');
+        const form = e.target;
+        const btn = form.querySelector('button');
+        const otp = form.otp.value.trim();
+        const newPassword = form.newPasswordReset.value;
+        if (!otp || !newPassword) return this.showResetError('OTP and new password are required.');
+        
+        btn.disabled = true; btn.querySelector('span').textContent = 'Resetting...';
+
+        try {
+            const data = await this.secureFetch('/api/password-reset', {
+                method: 'POST',
+                body: { username: this.resetUsername, otp, newPassword }
+            });
+            this.showNotification(data.message, 'success');
+            this.closeResetModal();
+        } catch (error) {
+            this.showResetError(error.message);
+        } finally {
+            btn.disabled = false; btn.querySelector('span').textContent = 'Reset Password';
+        }
+    }
+
+
+    // --- EXISTING METHODS (UNCHANGED BELOW THIS LINE) ---
+    
     checkExistingSession() {
         const session = validateSession();
         if (session) {
@@ -136,18 +230,22 @@ class VIPAdminPanel {
     async handleCreateUser(e) {
         e.preventDefault();
         const form = e.target;
+        const btn = form.querySelector('button');
         const userData = {
             Username: form.newUsername.value.trim(), Password: form.newPassword.value,
             Expiry: form.expiryPeriod.value, Device: form.deviceType.value,
             AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0,
         };
         if (!userData.Username || !userData.Password) return this.showNotification('Username and password are required', 'error');
+        
+        btn.disabled = true;
         try {
             await this.createUser(userData);
             form.reset(); this.updateFormVisibility(); this.updateCreateButtonText();
             await this.loadUsers();
             this.showNotification('User created successfully', 'success');
         } catch (error) { this.showNotification(`Failed to create user: ${error.message}`, 'error'); }
+        finally { btn.disabled = false; }
     }
 
     async createUser(userData) {
@@ -173,6 +271,7 @@ class VIPAdminPanel {
 
     async loadUsers() {
         document.getElementById('loadingUsers').style.display = 'block';
+        document.getElementById('usersTableBody').innerHTML = '';
         try {
             let url = this.config.API.BASE_URL;
             if (this.currentUser.AccountType === 'admin') url += `?filterByFormula=NOT({AccountType}='god')`;
@@ -186,6 +285,10 @@ class VIPAdminPanel {
     renderUsersTable() {
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
+        if (this.allUsers.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10" style="text-align: center;">No users found.</td></tr>`;
+            return;
+        }
         this.allUsers.forEach(({ id, fields: user }) => {
             const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < Math.floor(Date.now() / 1000);
             const row = tbody.insertRow();
@@ -237,8 +340,7 @@ class VIPAdminPanel {
         try {
             await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { HWID: '', HWID2: '' } }] } });
             this.showNotification(`HWID reset for ${username}`, 'success');
-            const row = [...document.getElementById('usersTableBody').rows].find(r => r.cells[0].textContent === username);
-            if (row) row.cells[6].textContent = 'NONE';
+            await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
     }
 
