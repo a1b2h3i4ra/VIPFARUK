@@ -1,43 +1,200 @@
-// VIP FARUK 999 - Secure Application Logic (v12 - Final with all features)
+// VIP FARUK 999 - Secure Application Logic (v9 - Final Logic with all features)
 class VIPAdminPanel {
-    constructor() { /* ... constructor logic ... */ }
-    init() { this.setupEventListeners(); this.checkExistingSession(); }
+    constructor() {
+        this.currentUser = null;
+        this.allUsers = [];
+        this.config = CONFIG;
+        this.init();
+    }
 
-    async secureFetch(url, options = {}) { /* ... secureFetch logic ... */ }
-    
+    init() {
+        this.setupEventListeners();
+        this.checkExistingSession();
+    }
+
+    async secureFetch(url, options = {}) {
+        const fetchOptions = {
+            method: options.method || 'GET',
+            headers: { 'Content-Type': 'application/json', 'x-airtable-url': url },
+        };
+        if (options.body) { fetchOptions.body = JSON.stringify(options.body); }
+        const response = await fetch(this.config.API.PROXY_URL, fetchOptions);
+        const data = await response.json().catch(() => ({ error: { message: `Server returned status ${response.status}` } }));
+        if (!response.ok) { throw new Error(data.error?.message || `An unknown server error occurred.`); }
+        return data;
+    }
+
     setupEventListeners() {
-        document.getElementById('loginForm')?.addEventListener('submit', (e) => this.handleLogin(e));
+        document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = e.target.loginUsername.value.trim();
+            const password = e.target.loginPassword.value;
+            const btn = e.target.querySelector('button');
+            if (!username || !password) return this.showError('Please enter both username and password');
+            btn.disabled = true; btn.querySelector('span').textContent = 'Authenticating...';
+            try {
+                const { success, user, message } = await this.authenticateUser(username, password);
+                if (success) {
+                    this.currentUser = user;
+                    createSession(this.currentUser);
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('dashboardSection').style.display = 'block';
+                    await this.setupPermissions();
+                    await this.loadUsers();
+                    this.showNotification('Login successful', 'success');
+                } else { this.showError(message); }
+            } catch (error) { this.showError(`Login failed: ${error.message}`); }
+            finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
+        });
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
         document.getElementById('accountType')?.addEventListener('change', () => { this.updateFormVisibility(); this.updateCreateButtonText(); });
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
-        document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => { e.preventDefault(); this.openModal(); });
-        document.getElementById('sendOtpForm')?.addEventListener('submit', (e) => this.handleSendOtp(e));
-        document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleVerifyOtp(e));
+    }
+
+    checkExistingSession() {
+        const session = validateSession();
+        if (session) {
+            this.currentUser = session.user;
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'block';
+            this.setupPermissions();
+            this.loadUsers();
+        }
+    }
+
+    async authenticateUser(username, password) {
+        try {
+            const url = `${this.config.API.BASE_URL}?filterByFormula={Username}='${encodeURIComponent(username)}'`;
+            const data = await this.secureFetch(url);
+            if (!data.records || data.records.length === 0) return { success: false, message: 'Invalid access key or username not found.' };
+            const user = data.records[0].fields;
+            if (user.Password !== password) return { success: false, message: 'Invalid password.' };
+            const allowed = ['god', 'admin', 'seller', 'reseller'];
+            if (!allowed.includes(user.AccountType)) return { success: false, message: 'Access Denied. Your account type cannot log in.' };
+            return { success: true, user: { ...user, recordId: data.records[0].id } };
+        } catch (error) { return { success: false, message: error.message }; }
+    }
+
+    async setupPermissions() {
+        const { AccountType, Username, Credits } = this.currentUser;
+        const perms = this.config.HIERARCHY.PERMISSIONS[AccountType] || [];
+        document.getElementById('userTypeBadge').textContent = AccountType.toUpperCase();
+        document.getElementById('welcomeUser').textContent = `Welcome, ${Username}`;
+        const creditsBadge = document.getElementById('creditsBadge');
+        if (AccountType === 'god' || AccountType === 'admin') { creditsBadge.style.display = 'none'; }
+        else { creditsBadge.style.display = 'block'; document.getElementById('userCredits').textContent = Credits; }
+        
+        const expiryEl = document.getElementById('expiryPeriod');
+        if (AccountType === 'god' || AccountType === 'admin') {
+            expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="24">1 Day</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option><option value="9999">Never</option>`;
+        } else {
+            expiryEl.innerHTML = `<option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
+        }
+
+        document.getElementById('deviceType').innerHTML = perms.includes('create_all') ? `<option value="single">Single</option><option value="double">Double</option><option value="unlimited">Unlimited</option>` : `<option value="single">Single</option><option value="double">Double</option>`;
+        let options = '<option value="user">User</option>';
+        if (perms.includes('create_reseller')) options += '<option value="reseller">Reseller</option>';
+        if (perms.includes('create_seller')) options += '<option value="seller">Seller</option>';
+        if (perms.includes('create_all')) options += '<option value="admin">Admin</option>';
+        document.getElementById('accountType').innerHTML = options;
+        this.updateFormVisibility();
+        this.updateCreateButtonText();
     }
     
-    async handleLogin(e) { /* ... login logic ... */ }
-    checkExistingSession() { /* ... session logic ... */ }
-    async authenticateUser(username, password) { /* ... authentication logic ... */ }
-    async setupPermissions() { /* ... permissions logic ... */ }
-    updateFormVisibility() { /* ... form visibility logic ... */ }
-    updateCreateButtonText() { /* ... button text logic ... */ }
-    calculateCreditCost() { /* ... credit cost logic ... */ }
-    async handleCreateUser(e) { /* ... create user logic ... */ }
-    async createUser(userData) { /* ... create user logic ... */ }
-    async loadUsers() { /* ... load users logic ... */ }
+    updateFormVisibility() {
+        const accountType = document.getElementById('accountType').value;
+        const isPrivileged = ['admin', 'seller', 'reseller'].includes(accountType);
+        document.getElementById('creditsGroup').style.display = isPrivileged ? 'block' : 'none';
+        document.getElementById('expiryPeriod').parentElement.style.display = isPrivileged ? 'none' : 'block';
+        document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
+    }
+
+    updateCreateButtonText() {
+        const btnText = document.getElementById('createUserBtn').querySelector('span');
+        const { AccountType } = this.currentUser;
+        const selectedType = document.getElementById('accountType').value;
+
+        if (AccountType === 'god' || AccountType === 'admin') {
+            btnText.textContent = `Create ${selectedType}`;
+            return;
+        }
+
+        const isPrivileged = ['admin', 'seller', 'reseller'].includes(selectedType);
+        const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
+        btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
+    }
     
+    calculateCreditCost() {
+        const { PRICING, DEVICE_MULTIPLIER } = this.config.CREDITS;
+        const period = document.getElementById('expiryPeriod').value;
+        const device = document.getElementById('deviceType').value;
+        return (PRICING[period] || 0) * (DEVICE_MULTIPLIER[device] || 1);
+    }
+    
+    async handleCreateUser(e) {
+        e.preventDefault();
+        const form = e.target;
+        const userData = {
+            Username: form.newUsername.value.trim(), Password: form.newPassword.value,
+            Expiry: form.expiryPeriod.value, Device: form.deviceType.value,
+            AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0,
+        };
+        if (!userData.Username || !userData.Password) return this.showNotification('Username and password are required', 'error');
+        try {
+            await this.createUser(userData);
+            form.reset(); this.updateFormVisibility(); this.updateCreateButtonText();
+            await this.loadUsers();
+            this.showNotification('User created successfully', 'success');
+        } catch (error) { this.showNotification(`Failed to create user: ${error.message}`, 'error'); }
+    }
+
+    async createUser(userData) {
+        let cost = 0;
+        const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
+
+        if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
+            cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
+            if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
+        }
+        
+        userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
+        userData.CreatedBy = this.currentUser.Username;
+        userData.HWID = ''; 
+        userData.HWID2 = '';
+        await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
+        if (cost > 0) {
+            this.currentUser.Credits -= cost;
+            await this.updateUserCredits(this.currentUser.recordId, this.currentUser.Credits);
+            document.getElementById('userCredits').textContent = this.currentUser.Credits;
+        }
+    }
+
+    async loadUsers() {
+        document.getElementById('loadingUsers').style.display = 'block';
+        try {
+            let url = this.config.API.BASE_URL;
+            if (this.currentUser.AccountType === 'admin') url += `?filterByFormula=NOT({AccountType}='god')`;
+            else if (this.currentUser.AccountType !== 'god') url += `?filterByFormula={CreatedBy}='${encodeURIComponent(this.currentUser.Username)}'`;
+            const data = await this.secureFetch(url); this.allUsers = data.records || [];
+            this.renderUsersTable(); this.updateStats();
+        } catch (error) { this.showNotification('Failed to load users: ' + error.message, 'error'); }
+        finally { document.getElementById('loadingUsers').style.display = 'none'; }
+    }
+
     renderUsersTable() {
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
         this.allUsers.forEach(({ id, fields: user }) => {
             const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < Math.floor(Date.now() / 1000);
             const row = tbody.insertRow();
+            
             let creditButton = '';
             if ((this.currentUser.AccountType === 'god' || this.currentUser.AccountType === 'admin' || this.currentUser.AccountType === 'seller') && (user.AccountType === 'seller' || user.AccountType === 'reseller')) {
                 creditButton = `<button onclick="app.giveCredits('${id}', '${user.Username}')" class="action-btn" style="background-color: var(--success);">Give Credits</button>`;
             }
+
             row.innerHTML = `
                 <td>${user.Username || ''}</td><td>${user.Password || ''}</td>
                 <td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td>
@@ -53,80 +210,66 @@ class VIPAdminPanel {
         });
     }
 
-    async giveCredits(recordId, username) { /* ... give credits logic ... */ }
-    async resetHWID(recordId, username) { /* ... reset HWID logic ... */ }
-    async deleteUser(recordId, username) { /* ... delete user logic ... */ }
-    async updateUserCredits(recordId, newCredits) { /* ... update credits logic ... */ }
-    updateStats() { /* ... update stats logic ... */ }
-    logout() { /* ... logout logic ... */ }
-    showError(message) { /* ... show error logic ... */ }
-    showNotification(message, type) { /* ... show notification logic ... */ }
-
-    // --- NEW FUNCTIONS FOR PASSWORD RESET MODAL ---
-    openModal() {
-        document.getElementById('resetPasswordModal').style.display = 'flex';
-        document.getElementById('resetStep1').style.display = 'block';
-        document.getElementById('resetStep2').style.display = 'none';
-        document.getElementById('resetError').style.display = 'none';
-        document.getElementById('sendOtpForm').reset();
-        document.getElementById('verifyOtpForm').reset();
-    }
-
-    closeModal() {
-        document.getElementById('resetPasswordModal').style.display = 'none';
-    }
-
-    async handleSendOtp(e) {
-        e.preventDefault();
-        const username = document.getElementById('resetUsername').value.trim();
-        const telegramId = document.getElementById('resetTelegramId').value.trim();
-        const btn = e.target.querySelector('button');
-        btn.disabled = true; btn.querySelector('span').textContent = 'Sending...';
-        document.getElementById('resetError').style.display = 'none';
-        try {
-            const response = await fetch('/api/password-reset', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, telegramId }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error);
-            document.getElementById('resetStep1').style.display = 'none';
-            document.getElementById('resetStep2').style.display = 'block';
-            this.showNotification(result.message, 'success');
-        } catch (error) {
-            document.getElementById('resetError').textContent = error.message;
-            document.getElementById('resetError').style.display = 'block';
-        } finally {
-            btn.disabled = false; btn.querySelector('span').textContent = 'Send OTP';
+    async giveCredits(recordId, username) {
+        const amountStr = prompt(`How many credits to give to ${username}?`);
+        if (!amountStr) return;
+        const amount = parseInt(amountStr);
+        if (isNaN(amount) || amount <= 0) return this.showNotification('Invalid credit amount.', 'error');
+        if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin' && this.currentUser.Credits < amount) {
+            return this.showNotification('Insufficient credits.', 'error');
         }
+        try {
+            const targetUser = this.allUsers.find(u => u.id === recordId).fields;
+            const newCreditTotal = (targetUser.Credits || 0) + amount;
+            await this.updateUserCredits(recordId, newCreditTotal);
+            if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
+                this.currentUser.Credits -= amount;
+                await this.updateUserCredits(this.currentUser.recordId, this.currentUser.Credits);
+                document.getElementById('userCredits').textContent = this.currentUser.Credits;
+            }
+            this.showNotification(`Successfully gave ${amount} credits to ${username}`, 'success');
+            await this.loadUsers();
+        } catch (error) { this.showNotification(`Failed to give credits: ${error.message}`, 'error'); }
     }
 
-    async handleVerifyOtp(e) {
-        e.preventDefault();
-        const username = document.getElementById('resetUsername').value.trim();
-        const otp = document.getElementById('otpInput').value.trim();
-        const newPassword = document.getElementById('newPasswordInput').value;
-        const btn = e.target.querySelector('button');
-        btn.disabled = true; btn.querySelector('span').textContent = 'Verifying...';
-        document.getElementById('resetError').style.display = 'none';
+    async resetHWID(recordId, username) {
+        if (!confirm(`Reset HWID for ${username}?`)) return;
         try {
-            const response = await fetch('/api/password-reset', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, otp, newPassword }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error);
-            this.showNotification(result.message, 'success');
-            setTimeout(() => this.closeModal(), 2000);
-        } catch (error) {
-            document.getElementById('resetError').textContent = error.message;
-            document.getElementById('resetError').style.display = 'block';
-        } finally {
-            btn.disabled = false; btn.querySelector('span').textContent = 'Reset Password';
-        }
+            await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { HWID: '', HWID2: '' } }] } });
+            this.showNotification(`HWID reset for ${username}`, 'success');
+            const row = [...document.getElementById('usersTableBody').rows].find(r => r.cells[0].textContent === username);
+            if (row) row.cells[6].textContent = 'NONE';
+        } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
+    }
+
+    async deleteUser(recordId, username) {
+        if (!confirm(`Delete user ${username}?`)) return;
+        try {
+            await this.secureFetch(`${this.config.API.BASE_URL}/${recordId}`, { method: 'DELETE' });
+            this.showNotification(`User ${username} deleted`, 'success');
+            await this.loadUsers();
+        } catch (error) { this.showNotification(`Failed to delete user: ${error.message}`, 'error'); }
+    }
+
+    async updateUserCredits(recordId, newCredits) {
+        await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { Credits: newCredits } }] } });
+    }
+    
+    updateStats() {
+        const total = this.allUsers.length;
+        const active = this.allUsers.filter(({ fields }) => fields.Expiry === '9999' || parseInt(fields.Expiry) > Date.now() / 1000).length;
+        document.getElementById('totalUsers').textContent = total;
+        document.getElementById('activeUsers').textContent = active;
+        document.getElementById('expiredUsers').textContent = total - active;
+        document.getElementById('resellerCount').textContent = this.allUsers.filter(({ fields }) => fields.AccountType === 'reseller').length;
+    }
+    
+    logout() { localStorage.removeItem('vip_session'); window.location.reload(); }
+    showError(message) { const el = document.getElementById('loginError'); el.textContent = message; el.style.display = 'block'; }
+    showNotification(message, type) {
+        const el = document.getElementById('notification');
+        el.textContent = message; el.className = `notification ${type} show`;
+        setTimeout(() => el.classList.remove('show'), 3000);
     }
 }
-
 const app = new VIPAdminPanel();
