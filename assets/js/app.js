@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v7 - Final with HWID Reset Confirmed)
+// VIP FARUK 999 - Secure Application Logic (v8 - Final with HWID Button Confirmed)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
