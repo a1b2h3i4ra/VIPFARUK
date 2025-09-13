@@ -1,6 +1,5 @@
-// VIP FARUK 999 - Secure Password Reset API (v8 - Final OTP Logic)
+// VIP FARUK 999 - Secure Password Reset API (v9 - Hardened Airtable Logic)
 export default async function handler(request, response) {
-    // Check for essential server configurations first
     const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN;
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -20,11 +19,15 @@ export default async function handler(request, response) {
     }
 
     async function updateAirtableRecord(recordId, fields) {
-        await fetch(`${AIRTABLE_BASE_URL}/${recordId}`, {
+        const res = await fetch(`${AIRTABLE_BASE_URL}/${recordId}`, {
             method: 'PATCH',
             headers: { 'Authorization': `Bearer ${AIRTABLE_TOKEN}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields }),
         });
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(`Failed to update Airtable. Reason: ${errorData.error?.message || res.statusText}. Please ensure Otp, OtpExpiry, OtpLastRequest, and OtpAttempts fields exist in your table.`);
+        }
     }
 
     try {
@@ -33,14 +36,14 @@ export default async function handler(request, response) {
 
         if (!userRes.ok) {
             const errorData = await userRes.json();
-            throw new Error(`Could not connect to the database. Airtable says: ${errorData.error?.message || 'Unknown Error'}`);
+            throw new Error(`Could not connect to database. Airtable says: ${errorData.error?.message || 'Unknown Error'}`);
         }
         
         const userData = await userRes.json();
         if (!userData.records || userData.records.length === 0) return response.status(404).json({ error: 'User not found.' });
         
         const userRecord = userData.records[0];
-        const { TelegramID, AccountType, Otp: storedOtp, OtpExpiry, OtpLastRequest, OtpAttempts } = userRecord.fields;
+        const { TelegramID, AccountType, Otp: storedOtp, OtpExpiry, OtpAttempts } = userRecord.fields;
 
         if (AccountType === 'user') return response.status(403).json({ error: 'Password reset is not available for this account type.' });
         if (!TelegramID) return response.status(400).json({ error: 'This user has no Telegram ID configured for password reset.' });
@@ -52,7 +55,6 @@ export default async function handler(request, response) {
             }
             if (!storedOtp || !OtpExpiry || Date.now() > OtpExpiry) return response.status(400).json({ error: 'OTP is invalid or has expired.' });
             
-            // --- THIS IS THE FIX ---
             if (String(storedOtp) !== String(otp)) {
                 await updateAirtableRecord(userRecord.id, { OtpAttempts: (OtpAttempts || 0) + 1 });
                 return response.status(400).json({ error: 'Incorrect OTP.' });
@@ -63,11 +65,14 @@ export default async function handler(request, response) {
             return response.status(200).json({ message: 'Password has been reset successfully.' });
         } else if (telegramId) { // Step 1: Send OTP
             if (String(TelegramID) !== String(telegramId)) return response.status(401).json({ error: 'Incorrect Telegram ID for this user.' });
+            
+            const { OtpLastRequest } = userRecord.fields;
             if (OtpLastRequest && (Date.now() - new Date(OtpLastRequest).getTime()) < 60000) {
                 return response.status(429).json({ error: 'Please wait 60 seconds before requesting another OTP.' });
             }
+            
             const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-            const newOtpExpiry = Date.now() + 300000; // 5 minutes expiry
+            const newOtpExpiry = Date.now() + 300000;
             const loginTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
 
             await updateAirtableRecord(userRecord.id, { Otp: newOtp, OtpExpiry: newOtpExpiry, OtpLastRequest: new Date().toISOString(), OtpAttempts: 0 });
@@ -80,6 +85,6 @@ export default async function handler(request, response) {
         }
     } catch (error) {
         console.error("Password Reset Error:", error);
-        return response.status(500).json({ error: 'An internal server error occurred: ' + error.message });
+        return response.status(500).json({ error: { message: 'An internal server error occurred: ' + error.message } });
     }
 }
