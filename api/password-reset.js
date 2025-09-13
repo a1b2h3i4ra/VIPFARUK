@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Password Reset API (v7 - Enhanced Error Handling)
+// VIP FARUK 999 - Secure Password Reset API (v8 - Final OTP Logic)
 export default async function handler(request, response) {
     // Check for essential server configurations first
     const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN;
@@ -51,10 +51,13 @@ export default async function handler(request, response) {
                 return response.status(400).json({ error: 'Too many incorrect attempts. OTP has been invalidated.' });
             }
             if (!storedOtp || !OtpExpiry || Date.now() > OtpExpiry) return response.status(400).json({ error: 'OTP is invalid or has expired.' });
-            if (storedOtp !== otp) {
+            
+            // --- THIS IS THE FIX ---
+            if (String(storedOtp) !== String(otp)) {
                 await updateAirtableRecord(userRecord.id, { OtpAttempts: (OtpAttempts || 0) + 1 });
                 return response.status(400).json({ error: 'Incorrect OTP.' });
             }
+
             await updateAirtableRecord(userRecord.id, { Password: newPassword, Otp: null, OtpExpiry: null, OtpLastRequest: null, OtpAttempts: null });
             await sendTelegramMessage(TelegramID, `✅ Your password for user *'${username}'* has been reset successfully.`);
             return response.status(200).json({ message: 'Password has been reset successfully.' });
