@@ -338,5 +338,4 @@ class VIPAdminPanel {
         }
     }
 }
-
 const app = new VIPAdminPanel();
