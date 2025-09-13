@@ -7,10 +7,10 @@ const CONFIG = {
     SECURITY: { SESSION_TIMEOUT: 3600000 },
     HIERARCHY: {
         PERMISSIONS: {
-            god: ['create_all', 'view_all', 'delete_all'],
-            admin: ['create_seller', 'create_reseller', 'create_user', 'view_non_god'],
-            seller: ['create_reseller', 'create_user', 'view_own'],
-            reseller: ['create_user', 'view_own']
+            god: ['create_all', 'create_admin', 'create_seller', 'create_reseller', 'create_user'],
+            admin: ['create_seller', 'create_reseller', 'create_user'],
+            seller: ['create_reseller', 'create_user'],
+            reseller: ['create_user']
         }
     },
     CREDITS: {
