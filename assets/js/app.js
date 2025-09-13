@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v10 - Final Logic with all features)
+// VIP FARUK 999 - Secure Application Logic (v11 - Final with all features)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -17,14 +17,10 @@ class VIPAdminPanel {
             method: options.method || 'GET',
             headers: { 'Content-Type': 'application/json', 'x-airtable-url': url },
         };
-        if (options.body) {
-            fetchOptions.body = JSON.stringify(options.body);
-        }
+        if (options.body) { fetchOptions.body = JSON.stringify(options.body); }
         const response = await fetch(this.config.API.PROXY_URL, fetchOptions);
         const data = await response.json().catch(() => ({ error: { message: `Server returned status ${response.status}` } }));
-        if (!response.ok) {
-            throw new Error(data.error?.message || `An unknown server error occurred.`);
-        }
+        if (!response.ok) { throw new Error(data.error?.message || `An unknown server error occurred.`); }
         return data;
     }
 
@@ -51,10 +47,7 @@ class VIPAdminPanel {
             finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
         });
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
-        document.getElementById('accountType')?.addEventListener('change', () => {
-            this.updateFormVisibility();
-            this.updateCreateButtonText();
-        });
+        document.getElementById('accountType')?.addEventListener('change', () => { this.updateFormVisibility(); this.updateCreateButtonText(); });
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
@@ -113,7 +106,6 @@ class VIPAdminPanel {
     updateFormVisibility() {
         const accountType = document.getElementById('accountType').value;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(accountType);
-        
         document.getElementById('creditsGroup').style.display = isPrivileged ? 'block' : 'none';
         document.getElementById('expiryPeriod').parentElement.style.display = isPrivileged ? 'none' : 'block';
         document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
@@ -123,12 +115,10 @@ class VIPAdminPanel {
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
-
         if (AccountType === 'god' || AccountType === 'admin') {
             btnText.textContent = `Create ${selectedType}`;
             return;
         }
-
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(selectedType);
         const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
@@ -161,16 +151,13 @@ class VIPAdminPanel {
     async createUser(userData) {
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
-
         if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
             cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
-        
         userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
-        userData.HWID = ''; 
-        userData.HWID2 = '';
+        userData.HWID = ''; userData.HWID2 = '';
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
         if (cost > 0) {
             this.currentUser.Credits -= cost;
@@ -197,6 +184,12 @@ class VIPAdminPanel {
         this.allUsers.forEach(({ id, fields: user }) => {
             const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < Math.floor(Date.now() / 1000);
             const row = tbody.insertRow();
+            
+            let creditButton = '';
+            if ((this.currentUser.AccountType === 'god' || this.currentUser.AccountType === 'admin' || this.currentUser.AccountType === 'seller') && (user.AccountType === 'seller' || user.AccountType === 'reseller')) {
+                creditButton = `<button onclick="app.giveCredits('${id}', '${user.Username}')" class="action-btn" style="background-color: var(--success);">Give Credits</button>`;
+            }
+
             row.innerHTML = `
                 <td>${user.Username || ''}</td><td>${user.Password || ''}</td>
                 <td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td>
@@ -205,10 +198,33 @@ class VIPAdminPanel {
                 <td>${user.CreatedBy || ''}</td>
                 <td><span class="status-badge ${isExpired ? 'status-expired' : 'status-active'}">${isExpired ? 'Expired' : 'Active'}</span></td>
                 <td class="action-buttons">
+                    ${creditButton}
                     <button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning">Reset HWID</button>
                     <button onclick="app.deleteUser('${id}', '${user.Username}')" class="action-btn btn-danger">Delete</button>
                 </td>`;
         });
+    }
+
+    async giveCredits(recordId, username) {
+        const amountStr = prompt(`How many credits to give to ${username}?`);
+        if (!amountStr) return;
+        const amount = parseInt(amountStr);
+        if (isNaN(amount) || amount <= 0) return this.showNotification('Invalid credit amount.', 'error');
+        if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin' && this.currentUser.Credits < amount) {
+            return this.showNotification('Insufficient credits.', 'error');
+        }
+        try {
+            const targetUser = this.allUsers.find(u => u.id === recordId).fields;
+            const newCreditTotal = (targetUser.Credits || 0) + amount;
+            await this.updateUserCredits(recordId, newCreditTotal);
+            if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
+                this.currentUser.Credits -= amount;
+                await this.updateUserCredits(this.currentUser.recordId, this.currentUser.Credits);
+                document.getElementById('userCredits').textContent = this.currentUser.Credits;
+            }
+            this.showNotification(`Successfully gave ${amount} credits to ${username}`, 'success');
+            await this.loadUsers();
+        } catch (error) { this.showNotification(`Failed to give credits: ${error.message}`, 'error'); }
     }
 
     async resetHWID(recordId, username) {
