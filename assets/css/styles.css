@@ -55,3 +55,47 @@ body { font-family: 'Inter', sans-serif; background: var(--dark-bg); color: var(
 .loading { display: none; text-align: center; padding: var(--spacing-2xl); }
 .spinner { width: 50px; height: 50px; border: 4px solid rgba(255, 215, 0, 0.2); border-top: 4px solid var(--primary-gold); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto var(--spacing-md); }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+/* FORGOT PASSWORD & MODAL STYLES (ADD TO END OF FILE) */
+.forgot-password-link {
+    text-align: center;
+    margin-top: var(--spacing-lg);
+}
+.forgot-password-link a {
+    color: var(--primary-gold);
+    text-decoration: none;
+    font-weight: 500;
+}
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+.modal-card {
+    background: var(--card-bg);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-color);
+    padding: var(--spacing-2xl);
+    width: 100%;
+    max-width: 420px;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+}
+.modal-close-btn {
+    position: absolute;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 2rem;
+    cursor: pointer;
+    line-height: 1;
+}
