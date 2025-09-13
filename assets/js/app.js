@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v10 - Forgot Password Feature Added)
+// VIP FARUK 999 - Secure Application Logic (v11 - Enhanced Logging & Cleanup)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -25,10 +25,22 @@ class VIPAdminPanel {
         }
         if (options.body) { fetchOptions.body = JSON.stringify(options.body); }
 
-        const response = await fetch(url, fetchOptions);
-        const data = await response.json().catch(() => ({ error: { message: `Server returned status ${response.status}` } }));
-        if (!response.ok) { throw new Error(data.error?.message || `An unknown server error occurred.`); }
-        return data;
+        try {
+            const response = await fetch(url, fetchOptions);
+            const data = await response.json().catch(() => {
+                // If parsing JSON fails, return a structured error
+                return { error: { message: `Server returned status ${response.status}. Could not parse response.` } };
+            });
+
+            if (!response.ok) {
+                // Throw an error with the message from the server's JSON response if available
+                throw new Error(data.error?.message || `An unknown server error occurred. (Status: ${response.status})`);
+            }
+            return data;
+        } catch (error) {
+            console.error('SecureFetch Error:', error); // Log the full error to the console for debugging
+            throw error; // Re-throw the error so it can be caught by the calling function
+        }
     }
 
     setupEventListeners() {
