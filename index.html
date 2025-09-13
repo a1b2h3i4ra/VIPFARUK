@@ -27,7 +27,6 @@
                         <h1 class="login-title">VIP Access Portal</h1>
                         <p class="login-subtitle">Secure Administrator Login</p>
                     </div>
-
                     <form id="loginForm" autocomplete="off">
                         <div class="form-group">
                             <label for="loginUsername" class="form-label">Access Key</label>
@@ -39,7 +38,6 @@
                         </div>
                         <button type="submit" class="btn-primary"><span>Continue</span></button>
                     </form>
-
                     <form id="otpForm" autocomplete="off" style="display: none;">
                          <p class="login-subtitle" style="margin-bottom: 1rem;">An OTP has been sent to your Telegram. Please enter it below.</p>
                         <div class="form-group">
@@ -48,7 +46,6 @@
                         </div>
                         <button type="submit" class="btn-primary"><span>Enter VIP Panel</span></button>
                     </form>
-
                     <div class="forgot-password-link">
                         <a href="#" id="forgotPasswordLink">Forgot Password?</a>
                     </div>
@@ -80,6 +77,9 @@
                         <div class="form-group"><label for="deviceType" class="form-label">Device Type</label><select id="deviceType" class="form-select" required></select></div>
                         <div class="form-group"><label for="accountType" class="form-label">Account Type</label><select id="accountType" class="form-select"></select></div>
                         <div class="form-group" id="creditsGroup" style="display: none;"><label for="creditsToGive" class="form-label">Credits to Give</label><input type="number" id="creditsToGive" class="form-input" value="10" min="0"></div>
+                        
+                        <div class="form-group" id="telegramIdGroup" style="display: none;"><label for="newTelegramId" class="form-label">Telegram ID</label><input type="text" id="newTelegramId" class="form-input" placeholder="Required for Seller/Reseller"></div>
+
                         <button type="submit" class="btn-primary" id="createUserBtn"><span>Create</span></button>
                     </form>
                 </section>
