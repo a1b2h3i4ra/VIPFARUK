@@ -32,8 +32,7 @@ export default async function handler(request, response) {
         if (AccountType === 'user') return response.status(403).json({ error: 'Password reset is not available for this account type.' });
         if (!TelegramID) return response.status(400).json({ error: 'This user has no Telegram ID configured.' });
         
-        // --- LOGIC TO CHANGE THE PASSWORD ---
-        if (otp && newPassword) {
+        if (otp && newPassword) { // Verify OTP and reset password
             if ((OtpAttempts || 0) >= 3) {
                 await updateAirtableRecord(userRecord.id, { Otp: null, OtpExpiry: null, OtpAttempts: null });
                 return response.status(400).json({ error: 'Too many incorrect attempts. OTP has been invalidated.' });
@@ -46,16 +45,13 @@ export default async function handler(request, response) {
             await updateAirtableRecord(userRecord.id, { Password: newPassword, Otp: null, OtpExpiry: null, OtpLastRequest: null, OtpAttempts: null });
             await sendTelegramMessage(TelegramID, `✅ Your password for user *'${username}'* has been reset successfully.`);
             return response.status(200).json({ message: 'Password has been reset successfully.' });
-        } 
-        // --- LOGIC TO SEND AN OTP ---
-        else {
+        } else { // Send OTP
             if (TelegramID !== telegramId) return response.status(401).json({ error: 'Incorrect Telegram ID for this user.' });
             if (OtpLastRequest && (Date.now() - new Date(OtpLastRequest).getTime()) < 60000) {
                 return response.status(429).json({ error: 'Please wait 60 seconds before requesting another OTP.' });
             }
             const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-            // UPDATED: OTP is now valid for 15 minutes (900000 milliseconds)
-            const newOtpExpiry = Date.now() + 900000; 
+            const newOtpExpiry = Date.now() + 900000; // 15 minutes expiry
             const loginTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
 
             await updateAirtableRecord(userRecord.id, { Otp: newOtp, OtpExpiry: newOtpExpiry, OtpLastRequest: new Date().toISOString(), OtpAttempts: 0 });
