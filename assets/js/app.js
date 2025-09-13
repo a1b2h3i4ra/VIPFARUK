@@ -31,6 +31,11 @@ class VIPAdminPanel {
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
+
+        // Event Listeners for Password Reset
+        document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => { e.preventDefault(); this.openModal(); });
+        document.getElementById('sendOtpForm')?.addEventListener('submit', (e) => this.handleSendOtp(e));
+        document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleVerifyOtp(e));
     }
 
     async handleLogin(e) {
@@ -267,6 +272,72 @@ class VIPAdminPanel {
         const el = document.getElementById('notification');
         el.textContent = message; el.className = `notification ${type} show`;
         setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    // --- NEW FUNCTIONS FOR PASSWORD RESET MODAL ---
+    openModal() {
+        document.getElementById('resetPasswordModal').style.display = 'flex';
+        document.getElementById('resetStep1').style.display = 'block';
+        document.getElementById('resetStep2').style.display = 'none';
+        document.getElementById('resetError').style.display = 'none';
+        document.getElementById('sendOtpForm').reset();
+        document.getElementById('verifyOtpForm').reset();
+    }
+
+    closeModal() {
+        document.getElementById('resetPasswordModal').style.display = 'none';
+    }
+
+    async handleSendOtp(e) {
+        e.preventDefault();
+        const username = document.getElementById('resetUsername').value.trim();
+        const telegramId = document.getElementById('resetTelegramId').value.trim();
+        const btn = e.target.querySelector('button');
+        btn.disabled = true; btn.querySelector('span').textContent = 'Sending...';
+        document.getElementById('resetError').style.display = 'none';
+        try {
+            const response = await fetch('/api/password-reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, telegramId }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+            document.getElementById('resetStep1').style.display = 'none';
+            document.getElementById('resetStep2').style.display = 'block';
+            this.showNotification(result.message, 'success');
+        } catch (error) {
+            document.getElementById('resetError').textContent = error.message;
+            document.getElementById('resetError').style.display = 'block';
+        } finally {
+            btn.disabled = false; btn.querySelector('span').textContent = 'Send OTP';
+        }
+    }
+
+    async handleVerifyOtp(e) {
+        e.preventDefault();
+        const username = document.getElementById('resetUsername').value.trim();
+        const otp = document.getElementById('otpInput').value.trim();
+        const newPassword = document.getElementById('newPasswordInput').value;
+        const btn = e.target.querySelector('button');
+        btn.disabled = true; btn.querySelector('span').textContent = 'Verifying...';
+        document.getElementById('resetError').style.display = 'none';
+        try {
+            const response = await fetch('/api/password-reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, otp, newPassword }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+            this.showNotification(result.message, 'success');
+            setTimeout(() => this.closeModal(), 2000);
+        } catch (error) {
+            document.getElementById('resetError').textContent = error.message;
+            document.getElementById('resetError').style.display = 'block';
+        } finally {
+            btn.disabled = false; btn.querySelector('span').textContent = 'Reset Password';
+        }
     }
 }
 const app = new VIPAdminPanel();
