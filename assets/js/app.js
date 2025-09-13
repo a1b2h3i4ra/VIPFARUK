@@ -285,7 +285,8 @@ class VIPAdminPanel {
             cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
-        userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
+        // This is the corrected line
+userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + Math.floor(parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
         userData.HWID = ''; userData.HWID2 = '';
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
