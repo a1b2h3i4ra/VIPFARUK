@@ -24,10 +24,6 @@ body { font-family: 'Inter', sans-serif; background: var(--dark-bg); color: var(
 .login-header { text-align: center; margin-bottom: var(--spacing-xl); }
 .login-title { font-size: 1.75rem; font-weight: 700; background: linear-gradient(45deg, var(--primary-gold), var(--secondary-gold)); -webkit-background-clip: text; color: transparent; }
 .login-subtitle { color: var(--text-secondary); }
-.forgot-password-link { display: block; text-align: center; margin-top: 1rem; color: var(--primary-gold); text-decoration: none; }
-.modal { position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; }
-.modal-content { background: var(--card-bg); padding: var(--spacing-xl); border: 1px solid var(--border-color); border-radius: var(--radius-xl); width: 90%; max-width: 450px; position: relative; }
-.close-button { color: #aaa; float: right; font-size: 28px; font-weight: bold; position: absolute; top: 10px; right: 20px; cursor: pointer; }
 .form-group { margin-bottom: var(--spacing-lg); }
 .form-label { display: block; margin-bottom: var(--spacing-sm); font-weight: 600; color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase; }
 .form-input, .form-select { width: 100%; padding: var(--spacing-md); background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: var(--radius-md); color: var(--text-primary); }
@@ -52,7 +48,7 @@ body { font-family: 'Inter', sans-serif; background: var(--dark-bg); color: var(
 .btn-warning { background: var(--warning); color: var(--dark-bg); }
 .btn-danger { background: var(--error); }
 .error-message { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error); color: var(--error); padding: var(--spacing-md); border-radius: var(--radius-md); margin-top: var(--spacing-md); }
-.notification { position: fixed; top: var(--spacing-md); right: var(--spacing-md); padding: var(--spacing-md) var(--spacing-lg); border-radius: var(--radius-md); color: white; font-weight: 600; z-index: 1001; transform: translateX(120%); transition: transform 0.4s ease; }
+.notification { position: fixed; top: var(--spacing-md); right: var(--spacing-md); padding: var(--spacing-md) var(--spacing-lg); border-radius: var(--radius-md); color: white; font-weight: 600; z-index: 1000; transform: translateX(120%); transition: transform 0.4s ease; }
 .notification.show { transform: translateX(0); }
 .notification.success { background: linear-gradient(45deg, var(--success), #059669); }
 .notification.error { background: linear-gradient(45deg, var(--error), #dc2626); }
