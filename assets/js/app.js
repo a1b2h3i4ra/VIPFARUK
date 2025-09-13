@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v12 - Final with all features)
+// VIP FARUK 999 - Secure Application Logic (v12 - Final with Secure OTP)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -31,13 +31,11 @@ class VIPAdminPanel {
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
-
-        // Event Listeners for Password Reset
         document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => { e.preventDefault(); this.openModal(); });
         document.getElementById('sendOtpForm')?.addEventListener('submit', (e) => this.handleSendOtp(e));
         document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleVerifyOtp(e));
     }
-
+    
     async handleLogin(e) {
         e.preventDefault();
         const username = e.target.loginUsername.value.trim();
@@ -340,4 +338,5 @@ class VIPAdminPanel {
         }
     }
 }
+
 const app = new VIPAdminPanel();
