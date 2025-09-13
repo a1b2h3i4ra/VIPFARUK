@@ -14,11 +14,11 @@ const CONFIG = {
         }
     },
     CREDITS: {
-        // UPDATED PRICING
+        // UPDATED PRICING TO MATCH YOUR REQUIREMENTS
         PRICING: {
-            '168': 0.5,      // 7 days
-            '360': 1,        // 15 days
-            '720': 2,        // 30 days
+            '168': 0.5,      // 7 days (single)
+            '360': 1,        // 15 days (single)
+            '720': 2,        // 30 days (single)
             // Admin/God only options
             '0.08333': 0.5,
             '1': 1,
@@ -28,7 +28,7 @@ const CONFIG = {
         DEVICE_MULTIPLIER: {
             'single': 1,
             'double': 2,
-            'unlimited': 4 // Unlimited costs more
+            'unlimited': 4 
         }
     }
 };
