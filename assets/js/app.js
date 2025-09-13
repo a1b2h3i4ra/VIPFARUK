@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v11 - Final with all features)
+// VIP FARUK 999 - Secure Application Logic (v9 - Final Logic with all features)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -115,10 +115,12 @@ class VIPAdminPanel {
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
+
         if (AccountType === 'god' || AccountType === 'admin') {
             btnText.textContent = `Create ${selectedType}`;
             return;
         }
+
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(selectedType);
         const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
@@ -151,13 +153,16 @@ class VIPAdminPanel {
     async createUser(userData) {
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
+
         if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
             cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
+        
         userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
-        userData.HWID = ''; userData.HWID2 = '';
+        userData.HWID = ''; 
+        userData.HWID2 = '';
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
         if (cost > 0) {
             this.currentUser.Credits -= cost;
