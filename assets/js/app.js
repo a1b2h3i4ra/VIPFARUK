@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v8 - Final with HWID Button Confirmed)
+// VIP FARUK 999 - Secure Application Logic (v9 - Final Logic)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -51,7 +51,11 @@ class VIPAdminPanel {
             finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
         });
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
-        ['accountType', 'expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
+        document.getElementById('accountType')?.addEventListener('change', () => {
+            this.updateFormVisibility();
+            this.updateCreateButtonText();
+        });
+        ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
     }
@@ -88,7 +92,6 @@ class VIPAdminPanel {
         const creditsBadge = document.getElementById('creditsBadge');
         if (AccountType === 'god' || AccountType === 'admin') { creditsBadge.style.display = 'none'; }
         else { creditsBadge.style.display = 'block'; document.getElementById('userCredits').textContent = Credits; }
-        document.getElementById('expiryPeriod').innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="24">1 Day</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option><option value="9999">Never</option>`;
         document.getElementById('deviceType').innerHTML = perms.includes('create_all') ? `<option value="single">Single</option><option value="double">Double</option><option value="unlimited">Unlimited</option>` : `<option value="single">Single</option><option value="double">Double</option>`;
         let options = '<option value="user">User</option>';
         if (perms.includes('create_reseller')) options += '<option value="reseller">Reseller</option>';
@@ -100,17 +103,27 @@ class VIPAdminPanel {
     }
     
     updateFormVisibility() {
-        const type = document.getElementById('accountType').value;
-        document.getElementById('creditsGroup').style.display = (type === 'reseller' || type === 'seller') ? 'block' : 'none';
+        const accountType = document.getElementById('accountType').value;
+        const isPrivileged = ['admin', 'seller', 'reseller'].includes(accountType);
+        
+        document.getElementById('creditsGroup').style.display = isPrivileged ? 'block' : 'none';
+        document.getElementById('expiryPeriod').parentElement.style.display = isPrivileged ? 'none' : 'block';
+        document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
     }
 
     updateCreateButtonText() {
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
-        if (AccountType === 'god' || AccountType === 'admin') { btnText.textContent = `Create ${document.getElementById('accountType').value}`; return; }
-        const type = document.getElementById('accountType').value;
-        const cost = (type === 'reseller' || type === 'seller') ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
-        btnText.textContent = `Create ${type} (-${cost} Credits)`;
+        const selectedType = document.getElementById('accountType').value;
+
+        if (AccountType === 'god' || AccountType === 'admin') {
+            btnText.textContent = `Create ${selectedType}`;
+            return;
+        }
+
+        const isPrivileged = ['admin', 'seller', 'reseller'].includes(selectedType);
+        const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
+        btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
     }
     
     calculateCreditCost() {
@@ -124,8 +137,9 @@ class VIPAdminPanel {
         e.preventDefault();
         const form = e.target;
         const userData = {
-            Username: form.newUsername.value.trim(), Password: form.newPassword.value, Expiry: form.expiryPeriod.value,
-            Device: form.deviceType.value, AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0,
+            Username: form.newUsername.value.trim(), Password: form.newPassword.value,
+            Expiry: form.expiryPeriod.value, Device: form.deviceType.value,
+            AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0,
         };
         if (!userData.Username || !userData.Password) return this.showNotification('Username and password are required', 'error');
         try {
@@ -138,15 +152,19 @@ class VIPAdminPanel {
 
     async createUser(userData) {
         let cost = 0;
+        const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
+
         if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
-            cost = (userData.AccountType === 'reseller' || userData.AccountType === 'seller') ? userData.Credits : this.calculateCreditCost();
+            cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
-        const period = parseFloat(userData.Expiry);
-        userData.Expiry = period === 9999 ? '9999' : String(Math.floor(Date.now() / 1000) + (period * 3600));
+        
+        // Set expiry to Never for privileged accounts, otherwise calculate it
+        userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
         userData.HWID = ''; 
         userData.HWID2 = '';
+
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
         if (cost > 0) {
             this.currentUser.Credits -= cost;
