@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v15 - Added Telegram ID on Create)
+// VIP FARUK 999 - Secure Application Logic (v16 - Auto-Delete Expired Users)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -53,7 +53,6 @@ class VIPAdminPanel {
         document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleResetPassword(e));
     }
 
-    // --- 2FA LOGIN FLOW ---
     async handlePasswordSubmit(e) { /* ... UNCHANGED ... */ 
         e.preventDefault();
         this.showError('');
@@ -114,7 +113,6 @@ class VIPAdminPanel {
         }
     }
 
-    // --- FORGOT PASSWORD METHODS ---
     openResetModal() { /* ... UNCHANGED ... */ 
         document.getElementById('resetPasswordModal').style.display = 'flex';
         document.getElementById('resetStep1').style.display = 'block';
@@ -176,7 +174,6 @@ class VIPAdminPanel {
         }
     }
     
-    // --- DASHBOARD METHODS ---
     checkExistingSession() { /* ... UNCHANGED ... */ 
         const session = validateSession();
         if (session) {
@@ -211,8 +208,7 @@ class VIPAdminPanel {
         this.updateCreateButtonText();
     }
 
-    // --- THIS FUNCTION IS UPDATED ---
-    updateFormVisibility() {
+    updateFormVisibility() { /* ... UNCHANGED ... */
         const accountType = document.getElementById('accountType').value;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(accountType);
         const needsTelegramId = ['seller', 'reseller'].includes(accountType);
@@ -220,7 +216,6 @@ class VIPAdminPanel {
         document.getElementById('creditsGroup').style.display = isPrivileged ? 'block' : 'none';
         document.getElementById('telegramIdGroup').style.display = needsTelegramId ? 'block' : 'none';
         
-        // Hide/show user-specific fields
         document.getElementById('expiryPeriod').parentElement.style.display = isPrivileged ? 'none' : 'block';
         document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
     }
@@ -244,13 +239,11 @@ class VIPAdminPanel {
         return (PRICING[period] || 0) * (DEVICE_MULTIPLIER[device] || 1);
     }
     
-    // --- THIS FUNCTION IS UPDATED ---
-    async handleCreateUser(e) {
+    async handleCreateUser(e) { /* ... UNCHANGED ... */
         e.preventDefault();
         const form = e.target;
         const btn = form.querySelector('button');
         
-        // Collect all form data
         const userData = {
             Username: form.newUsername.value.trim(),
             Password: form.newPassword.value,
@@ -278,15 +271,15 @@ class VIPAdminPanel {
         finally { btn.disabled = false; }
     }
 
-    async createUser(userData) { /* ... UNCHANGED ... */ 
+    async createUser(userData) {
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
         if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
             cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
-        // This is the corrected line
-userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + Math.floor(parseFloat(userData.Expiry) * 3600));
+        // --- THIS IS THE CORRECTED LINE ---
+        userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + Math.floor(parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
         userData.HWID = ''; userData.HWID2 = '';
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
@@ -296,18 +289,47 @@ userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) +
             document.getElementById('userCredits').textContent = this.currentUser.Credits;
         }
     }
-    async loadUsers() { /* ... UNCHANGED ... */ 
+
+    // --- THIS FUNCTION IS UPDATED WITH AUTO-DELETE LOGIC ---
+    async loadUsers() {
         document.getElementById('loadingUsers').style.display = 'block';
         document.getElementById('usersTableBody').innerHTML = '';
         try {
             let url = this.config.API.BASE_URL;
             if (this.currentUser.AccountType === 'admin') url += `?filterByFormula=NOT({AccountType}='god')`;
             else if (this.currentUser.AccountType !== 'god') url += `?filterByFormula={CreatedBy}='${encodeURIComponent(this.currentUser.Username)}'`;
-            const data = await this.secureFetch(url); this.allUsers = data.records || [];
-            this.renderUsersTable(); this.updateStats();
-        } catch (error) { this.showNotification('Failed to load users: ' + error.message, 'error'); }
-        finally { document.getElementById('loadingUsers').style.display = 'none'; }
+            
+            const data = await this.secureFetch(url);
+            this.allUsers = data.records || [];
+
+            // --- AUTO-DELETE LOGIC STARTS HERE ---
+            const now = Math.floor(Date.now() / 1000);
+            const expiredUsers = this.allUsers.filter(({ id, fields }) => {
+                const expiry = parseInt(fields.Expiry, 10);
+                return fields.Expiry && fields.Expiry !== '9999' && !isNaN(expiry) && expiry < now;
+            });
+
+            if (expiredUsers.length > 0) {
+                this.showNotification(`Found ${expiredUsers.length} expired user(s). Deleting now...`, 'success');
+                // Use Promise.all to delete users concurrently for better performance
+                await Promise.all(expiredUsers.map(user => 
+                    this.secureFetch(`${this.config.API.BASE_URL}/${user.id}`, { method: 'DELETE' })
+                ));
+                // Filter out the deleted users from the local list to update the UI instantly
+                this.allUsers = this.allUsers.filter(user => !expiredUsers.find(expired => expired.id === user.id));
+                this.showNotification('Expired users have been deleted.', 'success');
+            }
+            // --- AUTO-DELETE LOGIC ENDS HERE ---
+
+            this.renderUsersTable();
+            this.updateStats();
+        } catch (error) {
+            this.showNotification('Failed to load users: ' + error.message, 'error');
+        } finally {
+            document.getElementById('loadingUsers').style.display = 'none';
+        }
     }
+
     renderUsersTable() { /* ... UNCHANGED ... */ 
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
@@ -354,12 +376,21 @@ userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) +
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
     }
-    async deleteUser(recordId, username) { /* ... UNCHANGED ... */ 
-        if (!confirm(`Delete user ${username}?`)) return;
+    async deleteUser(recordId, username) {
+        // No confirmation needed for auto-delete, but keep for manual delete
+        if (username && !confirm(`Delete user ${username}?`)) return;
         try {
             await this.secureFetch(`${this.config.API.BASE_URL}/${recordId}`, { method: 'DELETE' });
-            this.showNotification(`User ${username} deleted`, 'success');
-            await this.loadUsers();
+            if (username) { // Only show notification for manual deletion
+                this.showNotification(`User ${username} deleted`, 'success');
+            }
+            // Manually remove the user from the table to avoid a full reload
+            const index = this.allUsers.findIndex(u => u.id === recordId);
+            if (index > -1) {
+                this.allUsers.splice(index, 1);
+                this.renderUsersTable();
+                this.updateStats();
+            }
         } catch (error) { this.showNotification(`Failed to delete user: ${error.message}`, 'error'); }
     }
     async updateUserCredits(recordId, newCredits) { /* ... UNCHANGED ... */ 
