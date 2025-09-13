@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v6 - Final with HWID Reset)
+// VIP FARUK 999 - Secure Application Logic (v8 - Final with HWID Button Confirmed)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -124,9 +124,8 @@ class VIPAdminPanel {
         e.preventDefault();
         const form = e.target;
         const userData = {
-            Username: form.newUsername.value.trim(), Password: form.newPassword.value,
-            Expiry: form.expiryPeriod.value, Device: form.deviceType.value,
-            AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0,
+            Username: form.newUsername.value.trim(), Password: form.newPassword.value, Expiry: form.expiryPeriod.value,
+            Device: form.deviceType.value, AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0,
         };
         if (!userData.Username || !userData.Password) return this.showNotification('Username and password are required', 'error');
         try {
@@ -178,11 +177,15 @@ class VIPAdminPanel {
                 <td>${user.Username || ''}</td><td>${user.Password || ''}</td>
                 <td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td>
                 <td>${user.Expiry === '9999' ? 'Never' : new Date(parseInt(user.Expiry) * 1000).toLocaleDateString()}</td>
-                <td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td>
+                <td>${user.Device || 'Single'}</td>
+                <td>
+                    <div>HWID: ${user.HWID ? 'SET' : 'NONE'}</div>
+                    <div>HWID2: ${user.HWID2 ? 'SET' : 'NONE'}</div>
+                </td>
                 <td>${user.CreatedBy || ''}</td>
                 <td><span class="status-badge ${isExpired ? 'status-expired' : 'status-active'}">${isExpired ? 'Expired' : 'Active'}</span></td>
                 <td class="action-buttons">
-                    <button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning">Reset HWID</button>
+                    <button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning" style="margin-bottom: 5px;">Reset All HWIDs</button>
                     <button onclick="app.deleteUser('${id}', '${user.Username}')" class="action-btn btn-danger">Delete</button>
                 </td>`;
         });
