@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v9 - Final Logic)
+// VIP FARUK 999 - Secure Application Logic (v10 - Final Logic with all features)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -92,6 +92,14 @@ class VIPAdminPanel {
         const creditsBadge = document.getElementById('creditsBadge');
         if (AccountType === 'god' || AccountType === 'admin') { creditsBadge.style.display = 'none'; }
         else { creditsBadge.style.display = 'block'; document.getElementById('userCredits').textContent = Credits; }
+        
+        const expiryEl = document.getElementById('expiryPeriod');
+        if (AccountType === 'god' || AccountType === 'admin') {
+            expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="24">1 Day</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option><option value="9999">Never</option>`;
+        } else {
+            expiryEl.innerHTML = `<option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
+        }
+
         document.getElementById('deviceType').innerHTML = perms.includes('create_all') ? `<option value="single">Single</option><option value="double">Double</option><option value="unlimited">Unlimited</option>` : `<option value="single">Single</option><option value="double">Double</option>`;
         let options = '<option value="user">User</option>';
         if (perms.includes('create_reseller')) options += '<option value="reseller">Reseller</option>';
@@ -159,12 +167,10 @@ class VIPAdminPanel {
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
         
-        // Set expiry to Never for privileged accounts, otherwise calculate it
         userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
         userData.HWID = ''; 
         userData.HWID2 = '';
-
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
         if (cost > 0) {
             this.currentUser.Credits -= cost;
