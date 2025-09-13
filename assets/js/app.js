@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v13 - 2FA Login Implemented)
+// VIP FARUK 999 - Secure Application Logic (v14 - UI Fixes & 2FA Polish)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -39,18 +39,13 @@ class VIPAdminPanel {
     }
 
     setupEventListeners() {
-        // --- Login Forms ---
         document.getElementById('loginForm')?.addEventListener('submit', (e) => this.handlePasswordSubmit(e));
         document.getElementById('otpForm')?.addEventListener('submit', (e) => this.handleOtpSubmit(e));
-
-        // Create User Form
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
         document.getElementById('accountType')?.addEventListener('change', () => { this.updateFormVisibility(); this.updateCreateButtonText(); });
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
-
-        // Forgot Password Modal
         document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => { e.preventDefault(); this.openResetModal(); });
         document.getElementById('closeModalBtn')?.addEventListener('click', () => this.closeResetModal());
         document.getElementById('resetPasswordModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) this.closeResetModal(); });
@@ -58,7 +53,7 @@ class VIPAdminPanel {
         document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleResetPassword(e));
     }
 
-    // --- NEW 2FA LOGIN FLOW ---
+    // --- 2FA LOGIN FLOW ---
     async handlePasswordSubmit(e) {
         e.preventDefault();
         this.showError('');
@@ -68,7 +63,7 @@ class VIPAdminPanel {
         const password = form.loginPassword.value;
         if (!username || !password) return this.showError('Please enter both username and password.');
 
-        this.loginUsername = username; // Store username for the OTP step
+        this.loginUsername = username;
         btn.disabled = true; btn.querySelector('span').textContent = 'Sending OTP...';
 
         try {
@@ -76,7 +71,6 @@ class VIPAdminPanel {
                 method: 'POST',
                 body: { username, password }
             });
-            // Switch to OTP form on success
             document.getElementById('loginForm').style.display = 'none';
             document.getElementById('otpForm').style.display = 'block';
             this.showNotification('An OTP has been sent to your Telegram', 'success');
@@ -130,17 +124,14 @@ class VIPAdminPanel {
         document.getElementById('verifyOtpForm').reset();
         this.showResetError('');
     }
-
     closeResetModal() {
         document.getElementById('resetPasswordModal').style.display = 'none';
     }
-
     showResetError(message) {
         const el = document.getElementById('resetError');
         el.textContent = message;
         el.style.display = message ? 'block' : 'none';
     }
-
     async handleRequestOtp(e) {
         e.preventDefault();
         this.showResetError('');
@@ -164,7 +155,6 @@ class VIPAdminPanel {
             btn.disabled = false; btn.querySelector('span').textContent = 'Send OTP';
         }
     }
-
     async handleResetPassword(e) {
         e.preventDefault();
         this.showResetError('');
@@ -187,7 +177,7 @@ class VIPAdminPanel {
         }
     }
     
-    // --- EXISTING METHODS (MOSTLY UNCHANGED) ---
+    // --- EXISTING METHODS ---
     checkExistingSession() {
         const session = validateSession();
         if (session) {
@@ -198,7 +188,6 @@ class VIPAdminPanel {
             this.loadUsers();
         }
     }
-    
     async setupPermissions() {
         const { AccountType, Username, Credits } = this.currentUser;
         const perms = this.config.HIERARCHY.PERMISSIONS[AccountType] || [];
@@ -357,7 +346,11 @@ class VIPAdminPanel {
         document.getElementById('resellerCount').textContent = this.allUsers.filter(({ fields }) => fields.AccountType === 'reseller').length;
     }
     logout() { localStorage.removeItem('vip_session'); window.location.reload(); }
-    showError(message) { const el = document.getElementById('loginError'); el.textContent = message; el.style.display = 'block'; }
+    showError(message) {
+        const el = document.getElementById('loginError');
+        el.textContent = message;
+        el.style.display = message ? 'block' : 'none';
+    }
     showNotification(message, type) {
         const el = document.getElementById('notification');
         el.textContent = message; el.className = `notification ${type} show`;
