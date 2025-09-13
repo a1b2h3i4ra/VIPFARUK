@@ -27,6 +27,7 @@
                         <h1 class="login-title">VIP Access Portal</h1>
                         <p class="login-subtitle">Secure Administrator Login</p>
                     </div>
+
                     <form id="loginForm" autocomplete="off">
                         <div class="form-group">
                             <label for="loginUsername" class="form-label">Access Key</label>
@@ -36,8 +37,18 @@
                             <label for="loginPassword" class="form-label">Password</label>
                             <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" autocomplete="current-password" required>
                         </div>
+                        <button type="submit" class="btn-primary"><span>Continue</span></button>
+                    </form>
+
+                    <form id="otpForm" autocomplete="off" style="display: none;">
+                         <p class="login-subtitle" style="margin-bottom: 1rem;">An OTP has been sent to your Telegram. Please enter it below.</p>
+                        <div class="form-group">
+                            <label for="loginOtp" class="form-label">One-Time Password (OTP)</label>
+                            <input type="text" id="loginOtp" inputmode="numeric" class="form-input" placeholder="Enter OTP from Telegram" required>
+                        </div>
                         <button type="submit" class="btn-primary"><span>Enter VIP Panel</span></button>
                     </form>
+
                     <div class="forgot-password-link">
                         <a href="#" id="forgotPasswordLink">Forgot Password?</a>
                     </div>
