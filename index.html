@@ -1,1 +1,109 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP FARUK 999 - Elite Admin Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="https://iili.io/KTwdcjR.md.png">
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+    <div class="background-overlay"></div>
+    <div class="container">
+        <div id="loginSection">
+            <div class="header">
+                <div class="logo">
+                    <img src="https://iili.io/KTwdcjR.md.png" alt="VIP FARUK 999 Logo" class="logo-image">
+                    <div class="logo-text">VIP FARUK 999</div>
+                </div>
+            </div>
+            <div class="login-container">
+                <div class="login-card">
+                    <div class="login-header">
+                        <img src="https://iili.io/KTwdcjR.md.png" alt="Logo" class="logo-image" style="width: 60px; height: 60px; margin: 0 auto 1rem; display: block;">
+                        <h1 class="login-title">VIP Access Portal</h1>
+                        <p class="login-subtitle">Secure Administrator Login</p>
+                    </div>
+                    <form id="loginForm" autocomplete="off">
+                        <div class="form-group">
+                            <label for="loginUsername" class="form-label">Access Key</label>
+                            <input type="text" id="loginUsername" class="form-input" placeholder="Enter your access key" autocomplete="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="loginPassword" class="form-label">Password</label>
+                            <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" autocomplete="current-password" required>
+                        </div>
+                        <button type="submit" class="btn-primary"><span>Enter VIP Panel</span></button>
+                    </form>
+                    <div id="loginError" class="error-message" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboardSection" style="display: none;">
+            <header class="header">
+                <div class="logo">
+                    <img src="https://iili.io/KTwdcjR.md.png" alt="VIP FARUK 999 Logo" class="logo-image">
+                    <div class="logo-text">VIP FARUK 999</div>
+                </div>
+                <div class="user-info">
+                    <div class="badge badge-gold" id="userTypeBadge"></div>
+                    <div class="badge badge-green" id="creditsBadge" style="display: none;">Credits: <span id="userCredits"></span></div>
+                    <span id="welcomeUser" class="welcome-text"></span>
+                    <button class="logout-btn" onclick="app.logout()"><span>Logout</span></button>
+                </div>
+            </header>
+            <main class="dashboard">
+                <section class="card">
+                    <h2 class="card-title">Create Account</h2>
+                    <form id="createUserForm" autocomplete="off">
+                        <div class="form-group"><label for="newUsername" class="form-label">Username</label><input type="text" id="newUsername" class="form-input" required></div>
+                        <div class="form-group"><label for="newPassword" class="form-label">Password</label><input type="text" id="newPassword" class="form-input" required></div>
+                        <div class="form-group"><label for="expiryPeriod" class="form-label">Expiry Period</label><select id="expiryPeriod" class="form-select" required></select></div>
+                        <div class="form-group"><label for="deviceType" class="form-label">Device Type</label><select id="deviceType" class="form-select" required></select></div>
+                        <div class="form-group"><label for="accountType" class="form-label">Account Type</label><select id="accountType" class="form-select"></select></div>
+                        <div class="form-group" id="creditsGroup" style="display: none;"><label for="creditsToGive" class="form-label">Credits to Give</label><input type="number" id="creditsToGive" class="form-input" value="10" min="0"></div>
+                        <button type="submit" class="btn-primary" id="createUserBtn"><span>Create</span></button>
+                    </form>
+                </section>
+                <section class="card">
+                    <h2 class="card-title">Statistics</h2>
+                    <div class="stats-grid">
+                        <div class="stat-item"><div class="stat-number" id="totalUsers">0</div><div class="stat-label">Total Users</div></div>
+                        <div class="stat-item"><div class="stat-number" id="activeUsers">0</div><div class="stat-label">Active Users</div></div>
+                        <div class="stat-item"><div class="stat-number" id="expiredUsers">0</div><div class="stat-label">Expired Users</div></div>
+                        <div class="stat-item"><div class="stat-number" id="resellerCount">0</div><div class="stat-label">Resellers</div></div>
+                    </div>
+                    <button class="btn-primary" onclick="app.loadUsers()" style="margin-top: 1rem;"><span>Refresh</span></button>
+                </section>
+            </main>
+            <section class="table-container">
+                <h2 class="card-title">User Management</h2>
+                <div class="loading" id="loadingUsers"><div class="spinner"></div><p>Loading users...</p></div>
+                <div class="table-wrapper">
+                    <table class="table" id="usersTable">
+                        <thead>
+                            <tr>
+                                <th>Username</th><th>Password</th><th>Type</th><th>Credits</th>
+                                <th>Expiry</th><th>Device</th><th>HWID</th><th>Created By</th>
+                                <th>Status</th><th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+    <div id="notification" class="notification" role="alert" aria-live="polite"></div>
+    <script src="config/config.js"></script>
+    <script src="assets/js/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }
+    </script>
+</body>
+</html>
