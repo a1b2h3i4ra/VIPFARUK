@@ -3,39 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VIP FARUK 999 - Elite Admin Panel">
-    <meta name="author" content="VIP FARUK 999">
-    <meta name="robots" content="noindex, nofollow">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    
     <title>VIP FARUK 999 - Elite Admin Panel</title>
-    
-    <!-- Preconnect to external domains -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    
-    <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://iili.io/KTwdcjR.md.png">
-    
-    <!-- Styles -->
     <link rel="stylesheet" href="assets/css/styles.css">
-    
-    <!-- Security Headers -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://api.airtable.com;">
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta http-equiv="X-Frame-Options" content="DENY">
-    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
-    <meta name="referrer" content="strict-origin-when-cross-origin">
 </head>
 <body>
-    <!-- Background Overlay -->
     <div class="background-overlay"></div>
-
     <div class="container">
-        <!-- Login Section -->
         <div id="loginSection">
             <div class="header">
                 <div class="logo">
@@ -43,7 +20,6 @@
                     <div class="logo-text">VIP FARUK 999</div>
                 </div>
             </div>
-            
             <div class="login-container">
                 <div class="login-card">
                     <div class="login-header">
@@ -51,43 +27,22 @@
                         <h1 class="login-title">VIP Access Portal</h1>
                         <p class="login-subtitle">Secure Administrator Login</p>
                     </div>
-                    
                     <form id="loginForm" autocomplete="off">
                         <div class="form-group">
                             <label for="loginUsername" class="form-label">Access Key</label>
-                            <input 
-                                type="text" 
-                                id="loginUsername" 
-                                class="form-input" 
-                                placeholder="Enter your access key"
-                                autocomplete="username"
-                                required
-                                maxlength="100"
-                            >
+                            <input type="text" id="loginUsername" class="form-input" placeholder="Enter your access key" autocomplete="username" required>
                         </div>
                         <div class="form-group">
                             <label for="loginPassword" class="form-label">Password</label>
-                            <input 
-                                type="password" 
-                                id="loginPassword" 
-                                class="form-input" 
-                                placeholder="Enter your password"
-                                autocomplete="current-password"
-                                required
-                                maxlength="100"
-                            >
+                            <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" autocomplete="current-password" required>
                         </div>
-                        <button type="submit" class="btn-primary">
-                            <span>Enter VIP Panel</span>
-                        </button>
+                        <button type="submit" class="btn-primary"><span>Enter VIP Panel</span></button>
                     </form>
-                    
                     <div id="loginError" class="error-message" style="display: none;"></div>
                 </div>
             </div>
         </div>
 
-        <!-- Main Dashboard -->
         <div id="dashboardSection" style="display: none;">
             <header class="header">
                 <div class="logo">
@@ -95,231 +50,59 @@
                     <div class="logo-text">VIP FARUK 999</div>
                 </div>
                 <div class="user-info">
-                    <div class="badge badge-gold" id="userTypeBadge">GOD</div>
-                    <div class="badge badge-green" id="creditsBadge" style="display: none;">
-                        Credits: <span id="userCredits">∞</span>
-                    </div>
-                    <span id="welcomeUser" class="welcome-text">Welcome, Supreme User</span>
-                    <button class="logout-btn" onclick="logout()">
-                        <span>Logout</span>
-                    </button>
+                    <div class="badge badge-gold" id="userTypeBadge"></div>
+                    <div class="badge badge-green" id="creditsBadge" style="display: none;">Credits: <span id="userCredits"></span></div>
+                    <span id="welcomeUser" class="welcome-text"></span>
+                    <button class="logout-btn" onclick="app.logout()"><span>Logout</span></button>
                 </div>
             </header>
-
             <main class="dashboard">
-                <!-- Create User Card -->
                 <section class="card">
-                    <h2 class="card-title">Create User</h2>
+                    <h2 class="card-title">Create Account</h2>
                     <form id="createUserForm" autocomplete="off">
-                        <div class="form-group">
-                            <label for="newUsername" class="form-label">Username</label>
-                            <input 
-                                type="text" 
-                                id="newUsername" 
-                                class="form-input" 
-                                placeholder="Enter username"
-                                autocomplete="off"
-                                required
-                                maxlength="50"
-                                pattern="[a-zA-Z0-9_-]+"
-                                title="Username can only contain letters, numbers, underscores, and hyphens"
-                            >
-                        </div>
-                        <div class="form-group">
-                            <label for="newPassword" class="form-label">Password</label>
-                            <input 
-                                type="text" 
-                                id="newPassword" 
-                                class="form-input" 
-                                placeholder="Enter password"
-                                autocomplete="new-password"
-                                required
-                                maxlength="100"
-                            >
-                        </div>
-                        <div class="form-group">
-                            <label for="expiryPeriod" class="form-label">Expiry Period</label>
-                            <select id="expiryPeriod" class="form-select" required>
-                                <option value="0.08333">5 Minutes</option>
-                                <option value="1">1 Hour</option>
-                                <option value="24">1 Day</option>
-                                <option value="168" selected>7 Days</option>
-                                <option value="360">15 Days</option>
-                                <option value="720">30 Days</option>
-                                <option value="9999">Never</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="deviceType" class="form-label">Device Type</label>
-                            <select id="deviceType" class="form-select" required>
-                                <option value="single" selected>Single Device</option>
-                                <option value="double">Double Device</option>
-                                <option value="unlimited">Unlimited Devices</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="accountType" class="form-label">Account Type</label>
-                            <select id="accountType" class="form-select">
-                                <option value="user" selected>User</option>
-                                <option value="reseller">Reseller</option>
-                                <option value="seller">Seller</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="creditsGroup" style="display: none;">
-                            <label for="creditsToGive" class="form-label">Credits to Give</label>
-                            <input 
-                                type="number" 
-                                id="creditsToGive" 
-                                class="form-input" 
-                                placeholder="Enter credits amount"
-                                min="0" 
-                                max="10000"
-                                value="10"
-                            >
-                        </div>
-                        <button type="submit" class="btn-primary" id="createUserBtn">
-                            <span>Create User</span>
-                        </button>
+                        <div class="form-group"><label for="newUsername" class="form-label">Username</label><input type="text" id="newUsername" class="form-input" required></div>
+                        <div class="form-group"><label for="newPassword" class="form-label">Password</label><input type="text" id="newPassword" class="form-input" required></div>
+                        <div class="form-group"><label for="expiryPeriod" class="form-label">Expiry Period</label><select id="expiryPeriod" class="form-select" required></select></div>
+                        <div class="form-group"><label for="deviceType" class="form-label">Device Type</label><select id="deviceType" class="form-select" required></select></div>
+                        <div class="form-group"><label for="accountType" class="form-label">Account Type</label><select id="accountType" class="form-select"></select></div>
+                        <div class="form-group" id="creditsGroup" style="display: none;"><label for="creditsToGive" class="form-label">Credits to Give</label><input type="number" id="creditsToGive" class="form-input" value="10" min="0"></div>
+                        <button type="submit" class="btn-primary" id="createUserBtn"><span>Create</span></button>
                     </form>
                 </section>
-
-                <!-- Statistics Card -->
                 <section class="card">
                     <h2 class="card-title">Statistics</h2>
                     <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="stat-number" id="totalUsers">0</div>
-                            <div class="stat-label">Total Users</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-number" id="activeUsers">0</div>
-                            <div class="stat-label">Active Users</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-number" id="expiredUsers">0</div>
-                            <div class="stat-label">Expired Users</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-number" id="resellerCount">0</div>
-                            <div class="stat-label">Resellers</div>
-                        </div>
+                        <div class="stat-item"><div class="stat-number" id="totalUsers">0</div><div class="stat-label">Total Users</div></div>
+                        <div class="stat-item"><div class="stat-number" id="activeUsers">0</div><div class="stat-label">Active Users</div></div>
+                        <div class="stat-item"><div class="stat-number" id="expiredUsers">0</div><div class="stat-label">Expired Users</div></div>
+                        <div class="stat-item"><div class="stat-number" id="resellerCount">0</div><div class="stat-label">Resellers</div></div>
                     </div>
-                    <button class="btn-primary" onclick="refreshStats()" style="margin-top: 1rem;">
-                        <span>Refresh Statistics</span>
-                    </button>
+                    <button class="btn-primary" onclick="app.loadUsers()" style="margin-top: 1rem;"><span>Refresh</span></button>
                 </section>
             </main>
-
-            <!-- Users Table -->
             <section class="table-container">
                 <h2 class="card-title">User Management</h2>
-                
-                <div class="loading" id="loadingUsers">
-                    <div class="spinner"></div>
-                    <p>Loading users...</p>
-                </div>
-                
+                <div class="loading" id="loadingUsers"><div class="spinner"></div><p>Loading users...</p></div>
                 <div class="table-wrapper">
                     <table class="table" id="usersTable">
                         <thead>
                             <tr>
-                                <th>Username</th>
-                                <th>Password</th>
-                                <th>Type</th>
-                                <th>Credits</th>
-                                <th>Expiry</th>
-                                <th>Device</th>
-                                <th>HWID</th>
-                                <th>Created By</th>
-                                <th>Status</th>
-                                <th>Actions</th>
+                                <th>Username</th><th>Password</th><th>Type</th><th>Credits</th>
+                                <th>Expiry</th><th>Device</th><th>HWID</th><th>Created By</th>
+                                <th>Status</th><th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="usersTableBody">
-                            <!-- Dynamic content will be inserted here -->
-                        </tbody>
+                        <tbody id="usersTableBody"></tbody>
                     </table>
                 </div>
             </section>
         </div>
     </div>
-
-    <!-- Notification -->
     <div id="notification" class="notification" role="alert" aria-live="polite"></div>
-
-    <!-- Scripts -->
     <script src="config/config.js"></script>
     <script src="assets/js/app.js"></script>
-    
-    <!-- Service Worker for offline functionality -->
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                    console.log('SW registered: ', registration);
-                }, function(registrationError) {
-                    console.log('SW registration failed: ', registrationError);
-                });
-            });
-        }
-    </script>
-
-    <!-- Security and Performance -->
-    <script>
-        // Disable right-click context menu
-        document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-        });
-
-        // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
-        document.addEventListener('keydown', function(e) {
-            if (e.keyCode == 123) { // F12
-                e.preventDefault();
-                return false;
-            }
-            if (e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) { // Ctrl+Shift+I
-                e.preventDefault();
-                return false;
-            }
-            if (e.ctrlKey && e.shiftKey && e.keyCode == 'J'.charCodeAt(0)) { // Ctrl+Shift+J
-                e.preventDefault();
-                return false;
-            }
-            if (e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) { // Ctrl+U
-                e.preventDefault();
-                return false;
-            }
-        });
-
-        // Clear console
-        if (typeof console !== 'undefined') {
-            console.clear();
-            console.log('%cVIP FARUK 999', 'font-size: 50px; font-weight: bold; background: linear-gradient(45deg, #FFD700, #FFA500); -webkit-background-clip: text; color: transparent;');
-            console.log('%cUnauthorized access is prohibited!', 'font-size: 16px; color: #ef4444; font-weight: bold;');
-        }
-
-        // Performance monitoring
-        window.addEventListener('load', function() {
-            const loadTime = performance.timing.domContentLoadedEventEnd - performance.timing.navigationStart;
-            console.log('Page loaded in', loadTime, 'ms');
-        });
-
-        // Error tracking
-        window.addEventListener('error', function(e) {
-            console.error('Global error:', e.error);
-        });
-
-        // Unhandled promise rejection tracking
-        window.addEventListener('unhandledrejection', function(e) {
-            console.error('Unhandled promise rejection:', e.reason);
-        });
-    </script>
-
-    <!-- Analytics (Optional - Replace with your analytics) -->
-    <script>
-        // Add your analytics code here if needed
-        // Example: Google Analytics, custom analytics, etc.
+        if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }
     </script>
 </body>
 </html>
