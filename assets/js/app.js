@@ -1,6 +1,6 @@
-// VIP FARUK 999 - Secure Application Logic
+// VIP FARUK 999 - Secure Application Logic (v2 - With Improved Error Handling)
 
-// This is a new helper function to securely call the proxy
+// This helper function now returns the full response for better error checking
 async function secureFetch(url, options = {}) {
     const headers = {
         ...options.headers,
@@ -8,18 +8,12 @@ async function secureFetch(url, options = {}) {
         'x-airtable-url': url // Send the real Airtable URL in a header
     };
 
-    const response = await fetch(CONFIG.API.PROXY_URL, {
+    // Return the raw fetch promise so the caller can handle all statuses
+    return fetch(CONFIG.API.PROXY_URL, {
         ...options,
         headers,
         body: options.body ? JSON.stringify(options.body) : null
     });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Proxy Error: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
 }
 
 
@@ -47,6 +41,12 @@ class VIPAdminPanel {
                     this.showError(document.getElementById('loginError'), 'Please enter both username and password');
                     return;
                 }
+                
+                // Show a loading indicator
+                const loginButton = loginForm.querySelector('button');
+                loginButton.disabled = true;
+                loginButton.textContent = 'Authenticating...';
+
                 try {
                     const result = await this.authenticateUser(username, password);
                     if (result.success) {
@@ -59,10 +59,15 @@ class VIPAdminPanel {
                         await this.loadUsers();
                         this.showNotification('Login successful', 'success');
                     } else {
+                        // Show the specific error message from the authentication function
                         this.showError(document.getElementById('loginError'), result.message);
                     }
                 } catch (error) {
-                    this.showError(document.getElementById('loginError'), 'Connection error. Please try again.');
+                    this.showError(document.getElementById('loginError'), 'A network error occurred. Please check your connection.');
+                } finally {
+                    // Re-enable the login button
+                    loginButton.disabled = false;
+                    loginButton.textContent = 'Enter VIP Panel';
                 }
             });
         }
@@ -92,10 +97,20 @@ class VIPAdminPanel {
     async authenticateUser(username, password) {
         try {
             const url = `${this.config.API.BASE_URL}?filterByFormula={Username}='${encodeURIComponent(username)}'`;
-            const data = await secureFetch(url);
+            const response = await secureFetch(url);
+
+            // Handle HTTP errors from the proxy/Airtable with specific messages
+            if (!response.ok) {
+                if (response.status === 401) return { success: false, message: 'Authentication Error. Your secret API Token on Vercel might be invalid.' };
+                if (response.status === 404) return { success: false, message: 'Database Error. The Base ID or Table ID in config.js might be wrong.' };
+                if (response.status === 403) return { success: false, message: 'Permission Error. Check your Airtable API key permissions.' };
+                return { success: false, message: `Server returned an error: ${response.status}` };
+            }
+
+            const data = await response.json();
 
             if (!data.records || data.records.length === 0) {
-                return { success: false, message: 'Invalid access key.' };
+                return { success: false, message: 'Invalid access key or username not found.' };
             }
             const user = data.records[0].fields;
             if (user.Password !== password) {
@@ -103,7 +118,7 @@ class VIPAdminPanel {
             }
             const allowedTypes = ['god', 'admin', 'seller', 'reseller'];
             if (!allowedTypes.includes(user.AccountType)) {
-                return { success: false, message: 'Access denied.' };
+                return { success: false, message: 'Access Denied. Your account type cannot log into the panel.' };
             }
             return {
                 success: true,
@@ -115,10 +130,13 @@ class VIPAdminPanel {
                 }
             };
         } catch (error) {
-            console.error('Authentication error:', error);
-            return { success: false, message: 'Login failed. Please try again.' };
+            console.error('Authentication process error:', error);
+            return { success: false, message: 'A network error occurred. Could not connect to the server.' };
         }
     }
+    
+    // --- NO OTHER CHANGES ARE NEEDED BELOW THIS LINE ---
+    // The rest of the functions remain the same as before.
 
     setupPermissions() {
         if (!this.currentUser) return;
@@ -256,10 +274,12 @@ class VIPAdminPanel {
             }]
         };
 
-        await secureFetch(this.config.API.BASE_URL, {
+        const response = await secureFetch(this.config.API.BASE_URL, {
             method: 'POST',
             body: newUser
         });
+        
+        if (!response.ok) throw new Error('Failed to save new user to database.');
 
         if (creditCost > 0) {
             const newCreditTotal = this.currentUser.credits - creditCost;
@@ -279,7 +299,10 @@ class VIPAdminPanel {
                 url += `?filterByFormula={CreatedBy}='${this.currentUser.username}'`;
             }
 
-            const data = await secureFetch(url);
+            const response = await secureFetch(url);
+            if (!response.ok) throw new Error('Could not fetch user list.');
+            
+            const data = await response.json();
             this.allUsers = data.records || [];
             this.renderUsersTable();
             this.updateStats();
@@ -317,7 +340,8 @@ class VIPAdminPanel {
     async deleteUser(recordId, username) {
         if (!confirm(`Delete user: ${username}?`)) return;
         try {
-            await secureFetch(`${this.config.API.BASE_URL}/${recordId}`, { method: 'DELETE' });
+            const response = await secureFetch(`${this.config.API.BASE_URL}/${recordId}`, { method: 'DELETE' });
+             if (!response.ok) throw new Error('Server rejected the delete request.');
             this.showNotification(`User ${username} deleted`, 'success');
             await this.loadUsers();
         } catch (error) {
@@ -327,10 +351,11 @@ class VIPAdminPanel {
 
     async updateUserCredits(recordId, newCredits) {
         const patchData = { records: [{ id: recordId, fields: { Credits: newCredits } }] };
-        await secureFetch(this.config.API.BASE_URL, {
+        const response = await secureFetch(this.config.API.BASE_URL, {
             method: 'PATCH',
             body: patchData
         });
+        if (!response.ok) throw new Error('Could not update user credits.');
     }
     
     updateStats() {
