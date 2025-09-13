@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v11 - Enhanced Logging & Cleanup)
+// VIP FARUK 999 - Secure Application Logic (v12 - Final UI Polish)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -18,7 +18,6 @@ class VIPAdminPanel {
             method: options.method || 'GET',
             headers: { 'Content-Type': 'application/json' },
         };
-        // The proxy adds the airtable url header for API calls, not for password reset
         if (!url.startsWith('/api/')) {
             fetchOptions.headers['x-airtable-url'] = url;
             url = this.config.API.PROXY_URL;
@@ -27,34 +26,25 @@ class VIPAdminPanel {
 
         try {
             const response = await fetch(url, fetchOptions);
-            const data = await response.json().catch(() => {
-                // If parsing JSON fails, return a structured error
-                return { error: { message: `Server returned status ${response.status}. Could not parse response.` } };
-            });
-
+            const data = await response.json().catch(() => ({ error: { message: `Server returned status ${response.status}. Could not parse response.` } }));
             if (!response.ok) {
-                // Throw an error with the message from the server's JSON response if available
                 throw new Error(data.error?.message || `An unknown server error occurred. (Status: ${response.status})`);
             }
             return data;
         } catch (error) {
-            console.error('SecureFetch Error:', error); // Log the full error to the console for debugging
-            throw error; // Re-throw the error so it can be caught by the calling function
+            console.error('SecureFetch Error:', error);
+            throw error;
         }
     }
 
     setupEventListeners() {
-        // Login Form
+        // All event listeners
         document.getElementById('loginForm')?.addEventListener('submit', (e) => this.handleLogin(e));
-
-        // Create User Form
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
         document.getElementById('accountType')?.addEventListener('change', () => { this.updateFormVisibility(); this.updateCreateButtonText(); });
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
-
-        // Forgot Password Modal
         document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => { e.preventDefault(); this.openResetModal(); });
         document.getElementById('closeModalBtn')?.addEventListener('click', () => this.closeResetModal());
         document.getElementById('resetPasswordModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) this.closeResetModal(); });
@@ -91,36 +81,38 @@ class VIPAdminPanel {
         document.getElementById('resetStep2').style.display = 'none';
         document.getElementById('requestOtpForm').reset();
         document.getElementById('verifyOtpForm').reset();
-        document.getElementById('resetError').style.display = 'none';
+        this.showResetError(''); // Hide error on open
     }
 
     closeResetModal() {
         document.getElementById('resetPasswordModal').style.display = 'none';
     }
 
+    // --- THIS IS THE FIX ---
     showResetError(message) {
         const el = document.getElementById('resetError');
         el.textContent = message;
-        el.style.display = 'block';
+        if (message) {
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
     }
 
     async handleRequestOtp(e) {
         e.preventDefault();
-        this.showResetError('');
+        this.showResetError(''); // Hide previous errors
         const form = e.target;
         const btn = form.querySelector('button');
         const username = form.resetUsername.value.trim();
         const telegramId = form.telegramId.value.trim();
         if (!username || !telegramId) return this.showResetError('Username and Telegram ID are required.');
         
-        this.resetUsername = username; // Store username for the next step
+        this.resetUsername = username;
         btn.disabled = true; btn.querySelector('span').textContent = 'Sending...';
 
         try {
-            const data = await this.secureFetch('/api/password-reset', {
-                method: 'POST',
-                body: { username, telegramId }
-            });
+            const data = await this.secureFetch('/api/password-reset', { method: 'POST', body: { username, telegramId } });
             this.showNotification(data.message, 'success');
             document.getElementById('resetStep1').style.display = 'none';
             document.getElementById('resetStep2').style.display = 'block';
@@ -133,7 +125,7 @@ class VIPAdminPanel {
 
     async handleResetPassword(e) {
         e.preventDefault();
-        this.showResetError('');
+        this.showResetError(''); // Hide previous errors
         const form = e.target;
         const btn = form.querySelector('button');
         const otp = form.otp.value.trim();
@@ -143,10 +135,7 @@ class VIPAdminPanel {
         btn.disabled = true; btn.querySelector('span').textContent = 'Resetting...';
 
         try {
-            const data = await this.secureFetch('/api/password-reset', {
-                method: 'POST',
-                body: { username: this.resetUsername, otp, newPassword }
-            });
+            const data = await this.secureFetch('/api/password-reset', { method: 'POST', body: { username: this.resetUsername, otp, newPassword } });
             this.showNotification(data.message, 'success');
             this.closeResetModal();
         } catch (error) {
@@ -155,10 +144,8 @@ class VIPAdminPanel {
             btn.disabled = false; btn.querySelector('span').textContent = 'Reset Password';
         }
     }
-
-
-    // --- EXISTING METHODS (UNCHANGED BELOW THIS LINE) ---
     
+    // --- EXISTING METHODS (UNCHANGED) ---
     checkExistingSession() {
         const session = validateSession();
         if (session) {
@@ -169,7 +156,6 @@ class VIPAdminPanel {
             this.loadUsers();
         }
     }
-
     async authenticateUser(username, password) {
         try {
             const url = `${this.config.API.BASE_URL}?filterByFormula={Username}='${encodeURIComponent(username)}'`;
@@ -182,7 +168,6 @@ class VIPAdminPanel {
             return { success: true, user: { ...user, recordId: data.records[0].id } };
         } catch (error) { return { success: false, message: error.message }; }
     }
-
     async setupPermissions() {
         const { AccountType, Username, Credits } = this.currentUser;
         const perms = this.config.HIERARCHY.PERMISSIONS[AccountType] || [];
@@ -191,14 +176,12 @@ class VIPAdminPanel {
         const creditsBadge = document.getElementById('creditsBadge');
         if (AccountType === 'god' || AccountType === 'admin') { creditsBadge.style.display = 'none'; }
         else { creditsBadge.style.display = 'block'; document.getElementById('userCredits').textContent = Credits; }
-        
         const expiryEl = document.getElementById('expiryPeriod');
         if (AccountType === 'god' || AccountType === 'admin') {
             expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="24">1 Day</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option><option value="9999">Never</option>`;
         } else {
             expiryEl.innerHTML = `<option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
         }
-
         document.getElementById('deviceType').innerHTML = perms.includes('create_all') ? `<option value="single">Single</option><option value="double">Double</option><option value="unlimited">Unlimited</option>` : `<option value="single">Single</option><option value="double">Double</option>`;
         let options = '<option value="user">User</option>';
         if (perms.includes('create_reseller')) options += '<option value="reseller">Reseller</option>';
@@ -208,7 +191,6 @@ class VIPAdminPanel {
         this.updateFormVisibility();
         this.updateCreateButtonText();
     }
-    
     updateFormVisibility() {
         const accountType = document.getElementById('accountType').value;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(accountType);
@@ -216,40 +198,30 @@ class VIPAdminPanel {
         document.getElementById('expiryPeriod').parentElement.style.display = isPrivileged ? 'none' : 'block';
         document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
     }
-
     updateCreateButtonText() {
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
-
         if (AccountType === 'god' || AccountType === 'admin') {
             btnText.textContent = `Create ${selectedType}`;
             return;
         }
-
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(selectedType);
         const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
     }
-    
     calculateCreditCost() {
         const { PRICING, DEVICE_MULTIPLIER } = this.config.CREDITS;
         const period = document.getElementById('expiryPeriod').value;
         const device = document.getElementById('deviceType').value;
         return (PRICING[period] || 0) * (DEVICE_MULTIPLIER[device] || 1);
     }
-    
     async handleCreateUser(e) {
         e.preventDefault();
         const form = e.target;
         const btn = form.querySelector('button');
-        const userData = {
-            Username: form.newUsername.value.trim(), Password: form.newPassword.value,
-            Expiry: form.expiryPeriod.value, Device: form.deviceType.value,
-            AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0,
-        };
+        const userData = { Username: form.newUsername.value.trim(), Password: form.newPassword.value, Expiry: form.expiryPeriod.value, Device: form.deviceType.value, AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0, };
         if (!userData.Username || !userData.Password) return this.showNotification('Username and password are required', 'error');
-        
         btn.disabled = true;
         try {
             await this.createUser(userData);
@@ -259,20 +231,16 @@ class VIPAdminPanel {
         } catch (error) { this.showNotification(`Failed to create user: ${error.message}`, 'error'); }
         finally { btn.disabled = false; }
     }
-
     async createUser(userData) {
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
-
         if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
             cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
-        
         userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
-        userData.HWID = ''; 
-        userData.HWID2 = '';
+        userData.HWID = ''; userData.HWID2 = '';
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
         if (cost > 0) {
             this.currentUser.Credits -= cost;
@@ -280,7 +248,6 @@ class VIPAdminPanel {
             document.getElementById('userCredits').textContent = this.currentUser.Credits;
         }
     }
-
     async loadUsers() {
         document.getElementById('loadingUsers').style.display = 'block';
         document.getElementById('usersTableBody').innerHTML = '';
@@ -293,7 +260,6 @@ class VIPAdminPanel {
         } catch (error) { this.showNotification('Failed to load users: ' + error.message, 'error'); }
         finally { document.getElementById('loadingUsers').style.display = 'none'; }
     }
-
     renderUsersTable() {
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
@@ -304,27 +270,13 @@ class VIPAdminPanel {
         this.allUsers.forEach(({ id, fields: user }) => {
             const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < Math.floor(Date.now() / 1000);
             const row = tbody.insertRow();
-            
             let creditButton = '';
             if ((this.currentUser.AccountType === 'god' || this.currentUser.AccountType === 'admin' || this.currentUser.AccountType === 'seller') && (user.AccountType === 'seller' || user.AccountType === 'reseller')) {
                 creditButton = `<button onclick="app.giveCredits('${id}', '${user.Username}')" class="action-btn" style="background-color: var(--success);">Give Credits</button>`;
             }
-
-            row.innerHTML = `
-                <td>${user.Username || ''}</td><td>${user.Password || ''}</td>
-                <td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td>
-                <td>${user.Expiry === '9999' ? 'Never' : new Date(parseInt(user.Expiry) * 1000).toLocaleDateString()}</td>
-                <td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td>
-                <td>${user.CreatedBy || ''}</td>
-                <td><span class="status-badge ${isExpired ? 'status-expired' : 'status-active'}">${isExpired ? 'Expired' : 'Active'}</span></td>
-                <td class="action-buttons">
-                    ${creditButton}
-                    <button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning">Reset HWID</button>
-                    <button onclick="app.deleteUser('${id}', '${user.Username}')" class="action-btn btn-danger">Delete</button>
-                </td>`;
+            row.innerHTML = `<td>${user.Username || ''}</td><td>${user.Password || ''}</td><td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td><td>${user.Expiry === '9999' ? 'Never' : new Date(parseInt(user.Expiry) * 1000).toLocaleDateString()}</td><td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td><td>${user.CreatedBy || ''}</td><td><span class="status-badge ${isExpired ? 'status-expired' : 'status-active'}">${isExpired ? 'Expired' : 'Active'}</span></td><td class="action-buttons">${creditButton}<button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning">Reset HWID</button><button onclick="app.deleteUser('${id}', '${user.Username}')" class="action-btn btn-danger">Delete</button></td>`;
         });
     }
-
     async giveCredits(recordId, username) {
         const amountStr = prompt(`How many credits to give to ${username}?`);
         if (!amountStr) return;
@@ -346,7 +298,6 @@ class VIPAdminPanel {
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to give credits: ${error.message}`, 'error'); }
     }
-
     async resetHWID(recordId, username) {
         if (!confirm(`Reset HWID for ${username}?`)) return;
         try {
@@ -355,7 +306,6 @@ class VIPAdminPanel {
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
     }
-
     async deleteUser(recordId, username) {
         if (!confirm(`Delete user ${username}?`)) return;
         try {
@@ -364,11 +314,9 @@ class VIPAdminPanel {
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to delete user: ${error.message}`, 'error'); }
     }
-
     async updateUserCredits(recordId, newCredits) {
         await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { Credits: newCredits } }] } });
     }
-    
     updateStats() {
         const total = this.allUsers.length;
         const active = this.allUsers.filter(({ fields }) => fields.Expiry === '9999' || parseInt(fields.Expiry) > Date.now() / 1000).length;
@@ -377,7 +325,6 @@ class VIPAdminPanel {
         document.getElementById('expiredUsers').textContent = total - active;
         document.getElementById('resellerCount').textContent = this.allUsers.filter(({ fields }) => fields.AccountType === 'reseller').length;
     }
-    
     logout() { localStorage.removeItem('vip_session'); window.location.reload(); }
     showError(message) { const el = document.getElementById('loginError'); el.textContent = message; el.style.display = 'block'; }
     showNotification(message, type) {
