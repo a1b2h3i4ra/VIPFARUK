@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Application Logic (v9 - Final Logic with all features)
+// VIP FARUK 999 - Secure Application Logic (v12 - Final with all features)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
@@ -25,32 +25,34 @@ class VIPAdminPanel {
     }
 
     setupEventListeners() {
-        document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = e.target.loginUsername.value.trim();
-            const password = e.target.loginPassword.value;
-            const btn = e.target.querySelector('button');
-            if (!username || !password) return this.showError('Please enter both username and password');
-            btn.disabled = true; btn.querySelector('span').textContent = 'Authenticating...';
-            try {
-                const { success, user, message } = await this.authenticateUser(username, password);
-                if (success) {
-                    this.currentUser = user;
-                    createSession(this.currentUser);
-                    document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('dashboardSection').style.display = 'block';
-                    await this.setupPermissions();
-                    await this.loadUsers();
-                    this.showNotification('Login successful', 'success');
-                } else { this.showError(message); }
-            } catch (error) { this.showError(`Login failed: ${error.message}`); }
-            finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
-        });
+        document.getElementById('loginForm')?.addEventListener('submit', (e) => this.handleLogin(e));
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
         document.getElementById('accountType')?.addEventListener('change', () => { this.updateFormVisibility(); this.updateCreateButtonText(); });
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
+    }
+
+    async handleLogin(e) {
+        e.preventDefault();
+        const username = e.target.loginUsername.value.trim();
+        const password = e.target.loginPassword.value;
+        const btn = e.target.querySelector('button');
+        if (!username || !password) return this.showError('Please enter both username and password');
+        btn.disabled = true; btn.querySelector('span').textContent = 'Authenticating...';
+        try {
+            const { success, user, message } = await this.authenticateUser(username, password);
+            if (success) {
+                this.currentUser = user;
+                createSession(this.currentUser);
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('dashboardSection').style.display = 'block';
+                await this.setupPermissions();
+                await this.loadUsers();
+                this.showNotification('Login successful', 'success');
+            } else { this.showError(message); }
+        } catch (error) { this.showError(`Login failed: ${error.message}`); }
+        finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
     }
 
     checkExistingSession() {
@@ -115,12 +117,10 @@ class VIPAdminPanel {
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
-
         if (AccountType === 'god' || AccountType === 'admin') {
             btnText.textContent = `Create ${selectedType}`;
             return;
         }
-
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(selectedType);
         const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
@@ -153,16 +153,13 @@ class VIPAdminPanel {
     async createUser(userData) {
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
-
         if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
             cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
-        
         userData.Expiry = isPrivileged ? '9999' : String(Math.floor(Date.now() / 1000) + (parseFloat(userData.Expiry) * 3600));
         userData.CreatedBy = this.currentUser.Username;
-        userData.HWID = ''; 
-        userData.HWID2 = '';
+        userData.HWID = ''; userData.HWID2 = '';
         await this.secureFetch(this.config.API.BASE_URL, { method: 'POST', body: { records: [{ fields: userData }] } });
         if (cost > 0) {
             this.currentUser.Credits -= cost;
