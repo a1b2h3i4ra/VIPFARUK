@@ -197,7 +197,9 @@ class VIPAdminPanel {
             await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { HWID: '', HWID2: '' } }] } });
             this.showNotification(`HWID reset for ${username}`, 'success');
             const row = [...document.getElementById('usersTableBody').rows].find(r => r.cells[0].textContent === username);
-            if (row) row.cells[6].textContent = 'NONE';
+            if (row) {
+                row.cells[6].innerHTML = '<div>HWID: NONE</div><div>HWID2: NONE</div>';
+            }
         } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
     }
 
