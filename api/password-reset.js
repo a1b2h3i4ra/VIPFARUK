@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Password Reset API (v5 - Final with 15-minute OTP)
+// VIP FARUK 999 - Secure Password Reset API (v6 - Final with 5-minute OTP)
 export default async function handler(request, response) {
     const { username, telegramId, otp, newPassword } = request.body;
     const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN;
@@ -30,9 +30,9 @@ export default async function handler(request, response) {
         const { TelegramID, AccountType, Otp: storedOtp, OtpExpiry, OtpLastRequest, OtpAttempts } = userRecord.fields;
 
         if (AccountType === 'user') return response.status(403).json({ error: 'Password reset is not available for this account type.' });
-        if (!TelegramID) return response.status(400).json({ error: 'This user has no Telegram ID configured.' });
+        if (!TelegramID) return response.status(400).json({ error: 'This user has no Telegram ID configured for password reset.' });
         
-        if (otp && newPassword) { // Verify OTP and reset password
+        if (otp && newPassword) { // Step 2: Verify OTP and reset password
             if ((OtpAttempts || 0) >= 3) {
                 await updateAirtableRecord(userRecord.id, { Otp: null, OtpExpiry: null, OtpAttempts: null });
                 return response.status(400).json({ error: 'Too many incorrect attempts. OTP has been invalidated.' });
@@ -45,22 +45,24 @@ export default async function handler(request, response) {
             await updateAirtableRecord(userRecord.id, { Password: newPassword, Otp: null, OtpExpiry: null, OtpLastRequest: null, OtpAttempts: null });
             await sendTelegramMessage(TelegramID, `✅ Your password for user *'${username}'* has been reset successfully.`);
             return response.status(200).json({ message: 'Password has been reset successfully.' });
-        } else { // Send OTP
+        } else if (telegramId) { // Step 1: Send OTP
             if (TelegramID !== telegramId) return response.status(401).json({ error: 'Incorrect Telegram ID for this user.' });
             if (OtpLastRequest && (Date.now() - new Date(OtpLastRequest).getTime()) < 60000) {
                 return response.status(429).json({ error: 'Please wait 60 seconds before requesting another OTP.' });
             }
             const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-            const newOtpExpiry = Date.now() + 900000; // 15 minutes expiry
+            const newOtpExpiry = Date.now() + 300000; // 5 minutes expiry
             const loginTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
 
             await updateAirtableRecord(userRecord.id, { Otp: newOtp, OtpExpiry: newOtpExpiry, OtpLastRequest: new Date().toISOString(), OtpAttempts: 0 });
             
-            const message = `Your login OTP is: *${newOtp}*\n\nLogin Time: ${loginTime}\nExpiration Time: +15 minutes\n\n_If you did not request this, please ignore this message._`;
+            const message = `Your login OTP is: *${newOtp}*\n\nLogin Time: ${loginTime}\nExpiration Time: +5 minutes\n\n_If you did not request this, please ignore this message._`;
             await sendTelegramMessage(TelegramID, message);
             return response.status(200).json({ message: 'An OTP has been sent to your registered Telegram account.' });
+        } else {
+             return response.status(400).json({ error: 'Invalid request.' });
         }
     } catch (error) {
-        return response.status(500).json({ error: 'An internal server error occurred.' });
+        return response.status(500).json({ error: 'An internal server error occurred: ' + error.message });
     }
 }
