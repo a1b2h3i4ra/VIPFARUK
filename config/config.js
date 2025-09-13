@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Configuration (v11 - Final with New Credits)
+// VIP FARUK 999 - Secure Configuration (v12 - Final)
 const PROXY_URL = '/api/proxy';
 const AIRTABLE_BASE_URL = 'https://api.airtable.com/v0/appyns7Hg147GniSq/tbls64uNeAgvXrZge';
 
@@ -14,12 +14,12 @@ const CONFIG = {
         }
     },
     CREDITS: {
-        // UPDATED PRICING TO MATCH YOUR REQUIREMENTS
+        // FINAL PRICING STRUCTURE
         PRICING: {
             '168': 0.5,      // 7 days (single)
             '360': 1,        // 15 days (single)
             '720': 2,        // 30 days (single)
-            // Admin/God only options
+            // Admin/God only options below
             '0.08333': 0.5,
             '1': 1,
             '24': 2,
@@ -28,7 +28,7 @@ const CONFIG = {
         DEVICE_MULTIPLIER: {
             'single': 1,
             'double': 2,
-            'unlimited': 4 
+            'unlimited': 4
         }
     }
 };
