@@ -1,11 +1,11 @@
-// VIP FARUK 999 - Secure Application Logic (v14 - UI Fixes & 2FA Polish)
+// VIP FARUK 999 - Secure Application Logic (v15 - Added Telegram ID on Create)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
         this.allUsers = [];
         this.config = CONFIG;
-        this.loginUsername = null; // Used for 2FA login flow
-        this.resetUsername = null; // Used for password reset flow
+        this.loginUsername = null; 
+        this.resetUsername = null; 
         this.init();
     }
 
@@ -54,7 +54,7 @@ class VIPAdminPanel {
     }
 
     // --- 2FA LOGIN FLOW ---
-    async handlePasswordSubmit(e) {
+    async handlePasswordSubmit(e) { /* ... UNCHANGED ... */ 
         e.preventDefault();
         this.showError('');
         const form = e.target;
@@ -80,8 +80,7 @@ class VIPAdminPanel {
             btn.disabled = false; btn.querySelector('span').textContent = 'Continue';
         }
     }
-
-    async handleOtpSubmit(e) {
+    async handleOtpSubmit(e) { /* ... UNCHANGED ... */ 
         e.preventDefault();
         this.showError('');
         const form = e.target;
@@ -116,7 +115,7 @@ class VIPAdminPanel {
     }
 
     // --- FORGOT PASSWORD METHODS ---
-    openResetModal() {
+    openResetModal() { /* ... UNCHANGED ... */ 
         document.getElementById('resetPasswordModal').style.display = 'flex';
         document.getElementById('resetStep1').style.display = 'block';
         document.getElementById('resetStep2').style.display = 'none';
@@ -124,15 +123,15 @@ class VIPAdminPanel {
         document.getElementById('verifyOtpForm').reset();
         this.showResetError('');
     }
-    closeResetModal() {
+    closeResetModal() { /* ... UNCHANGED ... */ 
         document.getElementById('resetPasswordModal').style.display = 'none';
     }
-    showResetError(message) {
+    showResetError(message) { /* ... UNCHANGED ... */ 
         const el = document.getElementById('resetError');
         el.textContent = message;
         el.style.display = message ? 'block' : 'none';
     }
-    async handleRequestOtp(e) {
+    async handleRequestOtp(e) { /* ... UNCHANGED ... */ 
         e.preventDefault();
         this.showResetError('');
         const form = e.target;
@@ -155,7 +154,7 @@ class VIPAdminPanel {
             btn.disabled = false; btn.querySelector('span').textContent = 'Send OTP';
         }
     }
-    async handleResetPassword(e) {
+    async handleResetPassword(e) { /* ... UNCHANGED ... */ 
         e.preventDefault();
         this.showResetError('');
         const form = e.target;
@@ -177,8 +176,8 @@ class VIPAdminPanel {
         }
     }
     
-    // --- EXISTING METHODS ---
-    checkExistingSession() {
+    // --- DASHBOARD METHODS ---
+    checkExistingSession() { /* ... UNCHANGED ... */ 
         const session = validateSession();
         if (session) {
             this.currentUser = session.user;
@@ -188,7 +187,7 @@ class VIPAdminPanel {
             this.loadUsers();
         }
     }
-    async setupPermissions() {
+    async setupPermissions() { /* ... UNCHANGED ... */ 
         const { AccountType, Username, Credits } = this.currentUser;
         const perms = this.config.HIERARCHY.PERMISSIONS[AccountType] || [];
         document.getElementById('userTypeBadge').textContent = AccountType.toUpperCase();
@@ -211,14 +210,22 @@ class VIPAdminPanel {
         this.updateFormVisibility();
         this.updateCreateButtonText();
     }
+
+    // --- THIS FUNCTION IS UPDATED ---
     updateFormVisibility() {
         const accountType = document.getElementById('accountType').value;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(accountType);
+        const needsTelegramId = ['seller', 'reseller'].includes(accountType);
+
         document.getElementById('creditsGroup').style.display = isPrivileged ? 'block' : 'none';
+        document.getElementById('telegramIdGroup').style.display = needsTelegramId ? 'block' : 'none';
+        
+        // Hide/show user-specific fields
         document.getElementById('expiryPeriod').parentElement.style.display = isPrivileged ? 'none' : 'block';
         document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
     }
-    updateCreateButtonText() {
+
+    updateCreateButtonText() { /* ... UNCHANGED ... */ 
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
@@ -230,18 +237,37 @@ class VIPAdminPanel {
         const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
     }
-    calculateCreditCost() {
+    calculateCreditCost() { /* ... UNCHANGED ... */ 
         const { PRICING, DEVICE_MULTIPLIER } = this.config.CREDITS;
         const period = document.getElementById('expiryPeriod').value;
         const device = document.getElementById('deviceType').value;
         return (PRICING[period] || 0) * (DEVICE_MULTIPLIER[device] || 1);
     }
+    
+    // --- THIS FUNCTION IS UPDATED ---
     async handleCreateUser(e) {
         e.preventDefault();
         const form = e.target;
         const btn = form.querySelector('button');
-        const userData = { Username: form.newUsername.value.trim(), Password: form.newPassword.value, Expiry: form.expiryPeriod.value, Device: form.deviceType.value, AccountType: form.accountType.value, Credits: parseInt(form.creditsToGive.value) || 0, };
-        if (!userData.Username || !userData.Password) return this.showNotification('Username and password are required', 'error');
+        
+        // Collect all form data
+        const userData = {
+            Username: form.newUsername.value.trim(),
+            Password: form.newPassword.value,
+            Expiry: form.expiryPeriod.value,
+            Device: form.deviceType.value,
+            AccountType: form.accountType.value,
+            Credits: parseInt(form.creditsToGive.value) || 0,
+            TelegramID: form.newTelegramId.value.trim()
+        };
+
+        if (!userData.Username || !userData.Password) {
+            return this.showNotification('Username and password are required', 'error');
+        }
+        if (['seller', 'reseller'].includes(userData.AccountType) && !userData.TelegramID) {
+            return this.showNotification('Telegram ID is required for Sellers and Resellers', 'error');
+        }
+        
         btn.disabled = true;
         try {
             await this.createUser(userData);
@@ -251,7 +277,8 @@ class VIPAdminPanel {
         } catch (error) { this.showNotification(`Failed to create user: ${error.message}`, 'error'); }
         finally { btn.disabled = false; }
     }
-    async createUser(userData) {
+
+    async createUser(userData) { /* ... UNCHANGED ... */ 
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
         if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
@@ -268,7 +295,7 @@ class VIPAdminPanel {
             document.getElementById('userCredits').textContent = this.currentUser.Credits;
         }
     }
-    async loadUsers() {
+    async loadUsers() { /* ... UNCHANGED ... */ 
         document.getElementById('loadingUsers').style.display = 'block';
         document.getElementById('usersTableBody').innerHTML = '';
         try {
@@ -280,7 +307,7 @@ class VIPAdminPanel {
         } catch (error) { this.showNotification('Failed to load users: ' + error.message, 'error'); }
         finally { document.getElementById('loadingUsers').style.display = 'none'; }
     }
-    renderUsersTable() {
+    renderUsersTable() { /* ... UNCHANGED ... */ 
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
         if (this.allUsers.length === 0) {
@@ -297,7 +324,7 @@ class VIPAdminPanel {
             row.innerHTML = `<td>${user.Username || ''}</td><td>${user.Password || ''}</td><td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td><td>${user.Expiry === '9999' ? 'Never' : new Date(parseInt(user.Expiry) * 1000).toLocaleDateString()}</td><td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td><td>${user.CreatedBy || ''}</td><td><span class="status-badge ${isExpired ? 'status-expired' : 'status-active'}">${isExpired ? 'Expired' : 'Active'}</span></td><td class="action-buttons">${creditButton}<button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning">Reset HWID</button><button onclick="app.deleteUser('${id}', '${user.Username}')" class="action-btn btn-danger">Delete</button></td>`;
         });
     }
-    async giveCredits(recordId, username) {
+    async giveCredits(recordId, username) { /* ... UNCHANGED ... */ 
         const amountStr = prompt(`How many credits to give to ${username}?`);
         if (!amountStr) return;
         const amount = parseInt(amountStr);
@@ -318,7 +345,7 @@ class VIPAdminPanel {
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to give credits: ${error.message}`, 'error'); }
     }
-    async resetHWID(recordId, username) {
+    async resetHWID(recordId, username) { /* ... UNCHANGED ... */ 
         if (!confirm(`Reset HWID for ${username}?`)) return;
         try {
             await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { HWID: '', HWID2: '' } }] } });
@@ -326,7 +353,7 @@ class VIPAdminPanel {
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
     }
-    async deleteUser(recordId, username) {
+    async deleteUser(recordId, username) { /* ... UNCHANGED ... */ 
         if (!confirm(`Delete user ${username}?`)) return;
         try {
             await this.secureFetch(`${this.config.API.BASE_URL}/${recordId}`, { method: 'DELETE' });
@@ -334,10 +361,10 @@ class VIPAdminPanel {
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to delete user: ${error.message}`, 'error'); }
     }
-    async updateUserCredits(recordId, newCredits) {
+    async updateUserCredits(recordId, newCredits) { /* ... UNCHANGED ... */ 
         await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { Credits: newCredits } }] } });
     }
-    updateStats() {
+    updateStats() { /* ... UNCHANGED ... */ 
         const total = this.allUsers.length;
         const active = this.allUsers.filter(({ fields }) => fields.Expiry === '9999' || parseInt(fields.Expiry) > Date.now() / 1000).length;
         document.getElementById('totalUsers').textContent = total;
@@ -345,13 +372,15 @@ class VIPAdminPanel {
         document.getElementById('expiredUsers').textContent = total - active;
         document.getElementById('resellerCount').textContent = this.allUsers.filter(({ fields }) => fields.AccountType === 'reseller').length;
     }
-    logout() { localStorage.removeItem('vip_session'); window.location.reload(); }
-    showError(message) {
+    logout() { /* ... UNCHANGED ... */ 
+        localStorage.removeItem('vip_session'); window.location.reload(); 
+    }
+    showError(message) { /* ... UNCHANGED ... */ 
         const el = document.getElementById('loginError');
         el.textContent = message;
         el.style.display = message ? 'block' : 'none';
     }
-    showNotification(message, type) {
+    showNotification(message, type) { /* ... UNCHANGED ... */ 
         const el = document.getElementById('notification');
         el.textContent = message; el.className = `notification ${type} show`;
         setTimeout(() => el.classList.remove('show'), 3000);
