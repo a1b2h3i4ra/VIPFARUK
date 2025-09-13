@@ -177,11 +177,15 @@ class VIPAdminPanel {
                 <td>${user.Username || ''}</td><td>${user.Password || ''}</td>
                 <td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td>
                 <td>${user.Expiry === '9999' ? 'Never' : new Date(parseInt(user.Expiry) * 1000).toLocaleDateString()}</td>
-                <td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td>
+                <td>${user.Device || 'Single'}</td>
+                <td>
+                    <div>HWID: ${user.HWID ? 'SET' : 'NONE'}</div>
+                    <div>HWID2: ${user.HWID2 ? 'SET' : 'NONE'}</div>
+                </td>
                 <td>${user.CreatedBy || ''}</td>
                 <td><span class="status-badge ${isExpired ? 'status-expired' : 'status-active'}">${isExpired ? 'Expired' : 'Active'}</span></td>
                 <td class="action-buttons">
-                    <button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning">Reset HWID</button>
+                    <button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning" style="margin-bottom: 5px;">Reset All HWIDs</button>
                     <button onclick="app.deleteUser('${id}', '${user.Username}')" class="action-btn btn-danger">Delete</button>
                 </td>`;
         });
@@ -193,7 +197,9 @@ class VIPAdminPanel {
             await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { HWID: '', HWID2: '' } }] } });
             this.showNotification(`HWID reset for ${username}`, 'success');
             const row = [...document.getElementById('usersTableBody').rows].find(r => r.cells[0].textContent === username);
-            if (row) row.cells[6].textContent = 'NONE';
+            if (row) {
+                row.cells[6].innerHTML = '<div>HWID: NONE</div><div>HWID2: NONE</div>';
+            }
         } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
     }
 
