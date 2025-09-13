@@ -1,9 +1,10 @@
-// VIP FARUK 999 - Secure Application Logic (v12 - Final UI Polish)
+// VIP FARUK 999 - Secure Application Logic (v13 - 2FA Login Implemented)
 class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
         this.allUsers = [];
         this.config = CONFIG;
+        this.loginUsername = null; // Used for 2FA login flow
         this.resetUsername = null; // Used for password reset flow
         this.init();
     }
@@ -38,13 +39,18 @@ class VIPAdminPanel {
     }
 
     setupEventListeners() {
-        // All event listeners
-        document.getElementById('loginForm')?.addEventListener('submit', (e) => this.handleLogin(e));
+        // --- Login Forms ---
+        document.getElementById('loginForm')?.addEventListener('submit', (e) => this.handlePasswordSubmit(e));
+        document.getElementById('otpForm')?.addEventListener('submit', (e) => this.handleOtpSubmit(e));
+
+        // Create User Form
         document.getElementById('createUserForm')?.addEventListener('submit', (e) => this.handleCreateUser(e));
         document.getElementById('accountType')?.addEventListener('change', () => { this.updateFormVisibility(); this.updateCreateButtonText(); });
         ['expiryPeriod', 'deviceType', 'creditsToGive'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', () => this.updateCreateButtonText());
         });
+
+        // Forgot Password Modal
         document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => { e.preventDefault(); this.openResetModal(); });
         document.getElementById('closeModalBtn')?.addEventListener('click', () => this.closeResetModal());
         document.getElementById('resetPasswordModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) this.closeResetModal(); });
@@ -52,26 +58,67 @@ class VIPAdminPanel {
         document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleResetPassword(e));
     }
 
-    async handleLogin(e) {
+    // --- NEW 2FA LOGIN FLOW ---
+    async handlePasswordSubmit(e) {
         e.preventDefault();
-        const username = e.target.loginUsername.value.trim();
-        const password = e.target.loginPassword.value;
-        const btn = e.target.querySelector('button');
-        if (!username || !password) return this.showError('Please enter both username and password');
-        btn.disabled = true; btn.querySelector('span').textContent = 'Authenticating...';
+        this.showError('');
+        const form = e.target;
+        const btn = form.querySelector('button');
+        const username = form.loginUsername.value.trim();
+        const password = form.loginPassword.value;
+        if (!username || !password) return this.showError('Please enter both username and password.');
+
+        this.loginUsername = username; // Store username for the OTP step
+        btn.disabled = true; btn.querySelector('span').textContent = 'Sending OTP...';
+
         try {
-            const { success, user, message } = await this.authenticateUser(username, password);
-            if (success) {
+            await this.secureFetch('/api/login', {
+                method: 'POST',
+                body: { username, password }
+            });
+            // Switch to OTP form on success
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('otpForm').style.display = 'block';
+            this.showNotification('An OTP has been sent to your Telegram', 'success');
+        } catch (error) {
+            this.showError(error.message);
+        } finally {
+            btn.disabled = false; btn.querySelector('span').textContent = 'Continue';
+        }
+    }
+
+    async handleOtpSubmit(e) {
+        e.preventDefault();
+        this.showError('');
+        const form = e.target;
+        const btn = form.querySelector('button');
+        const otp = form.loginOtp.value.trim();
+        if (!otp) return this.showError('Please enter the OTP from Telegram.');
+
+        btn.disabled = true; btn.querySelector('span').textContent = 'Verifying...';
+
+        try {
+            const { success, user } = await this.secureFetch('/api/login', {
+                method: 'POST',
+                body: { username: this.loginUsername, otp }
+            });
+
+            if (success && user) {
                 this.currentUser = user;
                 createSession(this.currentUser);
                 document.getElementById('loginSection').style.display = 'none';
                 document.getElementById('dashboardSection').style.display = 'block';
                 await this.setupPermissions();
                 await this.loadUsers();
-                this.showNotification('Login successful', 'success');
-            } else { this.showError(message); }
-        } catch (error) { this.showError(`Login failed: ${error.message}`); }
-        finally { btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel'; }
+                this.showNotification('Login successful!', 'success');
+            } else {
+                 this.showError('Login failed. Please try again.');
+            }
+        } catch (error) {
+            this.showError(error.message);
+        } finally {
+            btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel';
+        }
     }
 
     // --- FORGOT PASSWORD METHODS ---
@@ -81,27 +128,22 @@ class VIPAdminPanel {
         document.getElementById('resetStep2').style.display = 'none';
         document.getElementById('requestOtpForm').reset();
         document.getElementById('verifyOtpForm').reset();
-        this.showResetError(''); // Hide error on open
+        this.showResetError('');
     }
 
     closeResetModal() {
         document.getElementById('resetPasswordModal').style.display = 'none';
     }
 
-    // --- THIS IS THE FIX ---
     showResetError(message) {
         const el = document.getElementById('resetError');
         el.textContent = message;
-        if (message) {
-            el.style.display = 'block';
-        } else {
-            el.style.display = 'none';
-        }
+        el.style.display = message ? 'block' : 'none';
     }
 
     async handleRequestOtp(e) {
         e.preventDefault();
-        this.showResetError(''); // Hide previous errors
+        this.showResetError('');
         const form = e.target;
         const btn = form.querySelector('button');
         const username = form.resetUsername.value.trim();
@@ -125,7 +167,7 @@ class VIPAdminPanel {
 
     async handleResetPassword(e) {
         e.preventDefault();
-        this.showResetError(''); // Hide previous errors
+        this.showResetError('');
         const form = e.target;
         const btn = form.querySelector('button');
         const otp = form.otp.value.trim();
@@ -145,7 +187,7 @@ class VIPAdminPanel {
         }
     }
     
-    // --- EXISTING METHODS (UNCHANGED) ---
+    // --- EXISTING METHODS (MOSTLY UNCHANGED) ---
     checkExistingSession() {
         const session = validateSession();
         if (session) {
@@ -156,18 +198,7 @@ class VIPAdminPanel {
             this.loadUsers();
         }
     }
-    async authenticateUser(username, password) {
-        try {
-            const url = `${this.config.API.BASE_URL}?filterByFormula={Username}='${encodeURIComponent(username)}'`;
-            const data = await this.secureFetch(url);
-            if (!data.records || data.records.length === 0) return { success: false, message: 'Invalid access key or username not found.' };
-            const user = data.records[0].fields;
-            if (user.Password !== password) return { success: false, message: 'Invalid password.' };
-            const allowed = ['god', 'admin', 'seller', 'reseller'];
-            if (!allowed.includes(user.AccountType)) return { success: false, message: 'Access Denied. Your account type cannot log in.' };
-            return { success: true, user: { ...user, recordId: data.records[0].id } };
-        } catch (error) { return { success: false, message: error.message }; }
-    }
+    
     async setupPermissions() {
         const { AccountType, Username, Credits } = this.currentUser;
         const perms = this.config.HIERARCHY.PERMISSIONS[AccountType] || [];
