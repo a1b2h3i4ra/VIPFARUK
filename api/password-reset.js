@@ -1,8 +1,17 @@
-// VIP FARUK 999 - Secure Password Reset API (v6 - Final with 5-minute OTP)
+// VIP FARUK 999 - Secure Password Reset API (v7 - Enhanced Error Handling)
 export default async function handler(request, response) {
-    const { username, telegramId, otp, newPassword } = request.body;
+    // Check for essential server configurations first
     const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN;
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!AIRTABLE_TOKEN) {
+        return response.status(500).json({ error: { message: "Configuration Error: Airtable API Token is not set on the server." } });
+    }
+    if (!TELEGRAM_BOT_TOKEN) {
+        return response.status(500).json({ error: { message: "Configuration Error: Telegram Bot Token is not set on the server." } });
+    }
+
+    const { username, telegramId, otp, newPassword } = request.body;
     const AIRTABLE_BASE_URL = 'https://api.airtable.com/v0/appyns7Hg147GniSq/tbls64uNeAgvXrZge';
 
     async function sendTelegramMessage(chatId, text) {
@@ -21,9 +30,13 @@ export default async function handler(request, response) {
     try {
         const findUserUrl = `${AIRTABLE_BASE_URL}?filterByFormula={Username}='${encodeURIComponent(username)}'`;
         const userRes = await fetch(findUserUrl, { headers: { 'Authorization': `Bearer ${AIRTABLE_TOKEN}` } });
-        if (!userRes.ok) throw new Error("Could not connect to the database.");
-        const userData = await userRes.json();
+
+        if (!userRes.ok) {
+            const errorData = await userRes.json();
+            throw new Error(`Could not connect to the database. Airtable says: ${errorData.error?.message || 'Unknown Error'}`);
+        }
         
+        const userData = await userRes.json();
         if (!userData.records || userData.records.length === 0) return response.status(404).json({ error: 'User not found.' });
         
         const userRecord = userData.records[0];
@@ -46,7 +59,7 @@ export default async function handler(request, response) {
             await sendTelegramMessage(TelegramID, `✅ Your password for user *'${username}'* has been reset successfully.`);
             return response.status(200).json({ message: 'Password has been reset successfully.' });
         } else if (telegramId) { // Step 1: Send OTP
-            if (TelegramID !== telegramId) return response.status(401).json({ error: 'Incorrect Telegram ID for this user.' });
+            if (String(TelegramID) !== String(telegramId)) return response.status(401).json({ error: 'Incorrect Telegram ID for this user.' });
             if (OtpLastRequest && (Date.now() - new Date(OtpLastRequest).getTime()) < 60000) {
                 return response.status(429).json({ error: 'Please wait 60 seconds before requesting another OTP.' });
             }
@@ -63,6 +76,7 @@ export default async function handler(request, response) {
              return response.status(400).json({ error: 'Invalid request.' });
         }
     } catch (error) {
+        console.error("Password Reset Error:", error);
         return response.status(500).json({ error: 'An internal server error occurred: ' + error.message });
     }
 }
