@@ -15,7 +15,6 @@ export default async function rateLimiter(request) {
     const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
     const now = Date.now();
 
-    // Get the request history for this IP, or create a new one
     let currentData = ipData.get(ip);
     if (!currentData) {
         currentData = { requests: [] };
@@ -23,10 +22,8 @@ export default async function rateLimiter(request) {
     }
 
     // --- 1. Check the SUSTAINED limit first ---
-    // Filter out old requests to only keep those within the sustained window
     const sustainedRequests = currentData.requests.filter(ts => (now - ts) < SUSTAINED_WINDOW_MS);
     if (sustainedRequests.length >= SUSTAINED_LIMIT) {
-        // This IP is making too many requests over a long period. Block them.
         return new Response(JSON.stringify({ error: { message: "Sustained rate limit exceeded. Please wait." } }), {
             status: 429,
             headers: { 'Content-Type': 'application/json' }
@@ -34,10 +31,8 @@ export default async function rateLimiter(request) {
     }
     
     // --- 2. Then, check the BURST limit ---
-    // Filter out old requests to only keep those within the burst window
     const burstRequests = sustainedRequests.filter(ts => (now - ts) < BURST_WINDOW_MS);
     if (burstRequests.length >= BURST_LIMIT) {
-        // This IP is making too many requests in a short burst. Block them.
         return new Response(JSON.stringify({ error: { message: "Burst rate limit exceeded. Please slow down." } }), {
             status: 429,
             headers: { 'Content-Type': 'application/json' }
@@ -49,6 +44,5 @@ export default async function rateLimiter(request) {
     currentData.requests = sustainedRequests;
     ipData.set(ip, currentData);
     
-    // Return null to indicate the request should proceed
-    return null;
+    return null; // Request is allowed
 }
