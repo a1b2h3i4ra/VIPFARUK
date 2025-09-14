@@ -1,5 +1,15 @@
-// VIP FARUK 999 - Secure Server-Side Proxy (v3 - Final)
+// VIP FARUK 999 - Secure Server-Side Proxy (v4 - with Smart Rate Limiting)
+import rateLimiter from './rate-limiter'; // <-- 1. IMPORT THE NEW RATE LIMITER
+
 export default async function handler(request, response) {
+    // <-- 2. APPLY THE RATE LIMITER AT THE VERY BEGINNING
+    const limitResponse = await rateLimiter(request);
+    if (limitResponse) {
+        // If the user is blocked, stop everything and send the block message.
+        return limitResponse;
+    }
+
+    // --- The rest of your proxy logic remains exactly the same ---
     const airtableUrl = request.headers['x-airtable-url'];
     if (!airtableUrl) {
         return response.status(400).json({ error: { message: "Configuration error: Airtable URL is missing." } });
