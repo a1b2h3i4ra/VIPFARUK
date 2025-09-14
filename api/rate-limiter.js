@@ -2,7 +2,7 @@
 
 const ipData = new Map();
 
-// --- Configuration ---
+// Configuration:
 // Allow a BURST of 25 requests in a short window (e.g., 1 minute)
 const BURST_LIMIT = 25;
 const BURST_WINDOW_MS = 60 * 1000; // 1 minute
@@ -21,7 +21,7 @@ export default async function rateLimiter(request) {
         ipData.set(ip, currentData);
     }
 
-    // --- 1. Check the SUSTAINED limit first ---
+    // 1. Check the SUSTAINED limit first
     const sustainedRequests = currentData.requests.filter(ts => (now - ts) < SUSTAINED_WINDOW_MS);
     if (sustainedRequests.length >= SUSTAINED_LIMIT) {
         return new Response(JSON.stringify({ error: { message: "Sustained rate limit exceeded. Please wait." } }), {
@@ -30,7 +30,7 @@ export default async function rateLimiter(request) {
         });
     }
     
-    // --- 2. Then, check the BURST limit ---
+    // 2. Then, check the BURST limit
     const burstRequests = sustainedRequests.filter(ts => (now - ts) < BURST_WINDOW_MS);
     if (burstRequests.length >= BURST_LIMIT) {
         return new Response(JSON.stringify({ error: { message: "Burst rate limit exceeded. Please slow down." } }), {
