@@ -302,24 +302,8 @@ class VIPAdminPanel {
             const data = await this.secureFetch(url);
             this.allUsers = data.records || [];
 
-            // --- AUTO-DELETE LOGIC STARTS HERE ---
-            const now = Math.floor(Date.now() / 1000);
-            const expiredUsers = this.allUsers.filter(({ id, fields }) => {
-                const expiry = parseInt(fields.Expiry, 10);
-                return fields.Expiry && fields.Expiry !== '9999' && !isNaN(expiry) && expiry < now;
-            });
-
-            if (expiredUsers.length > 0) {
-                this.showNotification(`Found ${expiredUsers.length} expired user(s). Deleting now...`, 'success');
-                // Use Promise.all to delete users concurrently for better performance
-                await Promise.all(expiredUsers.map(user => 
-                    this.secureFetch(`${this.config.API.BASE_URL}/${user.id}`, { method: 'DELETE' })
-                ));
-                // Filter out the deleted users from the local list to update the UI instantly
-                this.allUsers = this.allUsers.filter(user => !expiredUsers.find(expired => expired.id === user.id));
-                this.showNotification('Expired users have been deleted.', 'success');
-            }
-            // --- AUTO-DELETE LOGIC ENDS HERE ---
+            // Note: Do not auto-delete expired users. Keep them in Airtable and display as "Expired" in UI.
+            // The UI badge in renderUsersTable() already shows expired status based on the Expiry timestamp.
 
             this.renderUsersTable();
             this.updateStats();
