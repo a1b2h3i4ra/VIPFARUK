@@ -96,6 +96,16 @@
             </main>
             <section class="table-container">
                 <h2 class="card-title">User Management</h2>
+                <div class="table-controls">
+                    <input type="text" id="searchInput" class="form-input" placeholder="Search username...">
+                    <button type="button" id="searchBtn" class="btn-secondary">Search</button>
+                    <select id="sortSelect" class="form-select">
+                        <option value="latest" selected>Latest → Oldest</option>
+                        <option value="oldest">Oldest → Latest</option>
+                        <option value="az">Username A → Z</option>
+                        <option value="za">Username Z → A</option>
+                    </select>
+                </div>
                 <div class="loading" id="loadingUsers"><div class="spinner"></div><p>Loading users...</p></div>
                 <div class="table-wrapper">
                     <table class="table" id="usersTable">
@@ -108,6 +118,21 @@
                         </thead>
                         <tbody id="usersTableBody"></tbody>
                     </table>
+                </div>
+                <div class="pagination-bar">
+                    <div class="rows-per-page">
+                        <span>Rows per page:</span>
+                        <select id="rowsPerPageSelect" class="form-select">
+                            <option value="25">25</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <div class="page-info" id="pageInfo">0 – 0 of 0</div>
+                    <div class="pager-buttons">
+                        <button id="prevPageBtn" class="icon-btn" aria-label="Previous page">‹</button>
+                        <button id="nextPageBtn" class="icon-btn" aria-label="Next page">›</button>
+                    </div>
                 </div>
             </section>
         </div>
