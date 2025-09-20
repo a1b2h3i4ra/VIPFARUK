@@ -3,9 +3,20 @@ class VIPAdminPanel {
     constructor() {
         this.currentUser = null;
         this.allUsers = [];
+        this.filteredUsers = [];
         this.config = CONFIG;
         this.loginUsername = null; 
         this.resetUsername = null; 
+        // Pagination, search, sort state
+        this.currentPage = 1;
+        this.rowsPerPage = 50;
+        this.searchQuery = '';
+        this.sortOption = 'latest';
+        // Server-side paging helpers
+        this.pageOffsets = []; // page index -> offset token for that page
+        this.totalCount = 0; // total count for current filter
+        this.currentPageRecords = []; // records of current page
+        this.currentFilterKey = '';
         this.init();
     }
 
@@ -51,6 +62,37 @@ class VIPAdminPanel {
         document.getElementById('resetPasswordModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) this.closeResetModal(); });
         document.getElementById('requestOtpForm')?.addEventListener('submit', (e) => this.handleRequestOtp(e));
         document.getElementById('verifyOtpForm')?.addEventListener('submit', (e) => this.handleResetPassword(e));
+
+        // New table controls
+        document.getElementById('searchInput')?.addEventListener('input', (e) => {
+            // Update local state only; do not fetch on every keystroke to save API calls
+            this.searchQuery = (e.target.value || '').toLowerCase();
+        });
+        document.getElementById('searchInput')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.resetPagingAndReload();
+            }
+        });
+        document.getElementById('searchBtn')?.addEventListener('click', () => {
+            const input = document.getElementById('searchInput');
+            this.searchQuery = (input?.value || '').toLowerCase();
+            this.resetPagingAndReload();
+        });
+        document.getElementById('sortSelect')?.addEventListener('change', (e) => {
+            this.sortOption = e.target.value || 'latest';
+            this.resetPagingAndReload();
+        });
+        const rowsSelect = document.getElementById('rowsPerPageSelect');
+        if (rowsSelect) {
+            this.rowsPerPage = parseInt(rowsSelect.value, 10) || 50;
+            rowsSelect.addEventListener('change', (e) => {
+                this.rowsPerPage = parseInt(e.target.value, 10) || 50;
+                this.resetPagingAndReload();
+            });
+        }
+        document.getElementById('prevPageBtn')?.addEventListener('click', () => this.goToPrevPage());
+        document.getElementById('nextPageBtn')?.addEventListener('click', () => this.goToNextPage());
     }
 
     async handlePasswordSubmit(e) { /* ... UNCHANGED ... */ 
@@ -290,23 +332,26 @@ class VIPAdminPanel {
         }
     }
 
-    // --- THIS FUNCTION IS UPDATED WITH AUTO-DELETE LOGIC ---
+    // --- Fetch current page from Airtable using server-side pagination and filters ---
     async loadUsers() {
         document.getElementById('loadingUsers').style.display = 'block';
         document.getElementById('usersTableBody').innerHTML = '';
         try {
-            let url = this.config.API.BASE_URL;
-            if (this.currentUser.AccountType === 'admin') url += `?filterByFormula=NOT({AccountType}='god')`;
-            else if (this.currentUser.AccountType !== 'god') url += `?filterByFormula={CreatedBy}='${encodeURIComponent(this.currentUser.Username)}'`;
-            
-            const data = await this.secureFetch(url);
-            this.allUsers = data.records || [];
+            // Ensure filter key is tracked; if changed externally, reset paging
+            const newKey = this.makeFilterKey();
+            if (newKey !== this.currentFilterKey) {
+                this.pageOffsets = [];
+                this.currentPage = 1;
+                this.totalCount = 0;
+                this.currentFilterKey = newKey;
+            }
 
-            // Note: Do not auto-delete expired users. Keep them in Airtable and display as "Expired" in UI.
-            // The UI badge in renderUsersTable() already shows expired status based on the Expiry timestamp.
-
-            this.renderUsersTable();
-            this.updateStats();
+            await this.fetchPageRecords(this.currentPage);
+            // Render page
+            this.renderUsersTable(this.currentPageRecords);
+            // Start async total count and stats update (not blocking)
+            this.countTotalRecords().catch(() => {});
+            this.updateStats().catch(() => {});
         } catch (error) {
             this.showNotification('Failed to load users: ' + error.message, 'error');
         } finally {
@@ -314,14 +359,137 @@ class VIPAdminPanel {
         }
     }
 
-    renderUsersTable() { /* ... UNCHANGED ... */ 
+    // Build filterByFormula combining access control + optional search
+    buildFilterFormula(includeSearch = true) {
+        const clauses = [];
+        // Access filter based on account type
+        if (this.currentUser.AccountType === 'admin') {
+            clauses.push("NOT({AccountType}='god')");
+        } else if (this.currentUser.AccountType !== 'god') {
+            clauses.push(`{CreatedBy}='${this.escapeFormulaString(this.currentUser.Username)}'`);
+        }
+        if (includeSearch && this.searchQuery) {
+            // Case-insensitive search on Username
+            const q = this.escapeFormulaString(this.searchQuery);
+            clauses.push(`SEARCH('${q}', {Username})`);
+        }
+        if (clauses.length === 0) return '';
+        if (clauses.length === 1) return clauses[0];
+        return `AND(${clauses.join(',')})`;
+    }
+
+    escapeFormulaString(str) {
+        return String(str).replace(/'/g, "\\'");
+    }
+
+    makeFilterKey() {
+        return [
+            this.currentUser?.AccountType,
+            this.currentUser?.Username,
+            this.rowsPerPage,
+            this.searchQuery,
+            this.sortOption
+        ].join('|');
+    }
+
+    async fetchPageRecords(pageNumber) {
+        const base = this.config.API.BASE_URL;
+        const params = new URLSearchParams();
+        params.set('pageSize', String(Math.min(this.rowsPerPage, 100)));
+        const filter = this.buildFilterFormula(true);
+        if (filter) params.set('filterByFormula', filter);
+        // Server-side sort for username options (az/za). For latest/oldest we'll sort within the page client-side.
+        if (this.sortOption === 'az' || this.sortOption === 'za') {
+            params.set('sort[0][field]', 'Username');
+            params.set('sort[0][direction]', this.sortOption === 'az' ? 'asc' : 'desc');
+        }
+        const offsetToken = this.pageOffsets[pageNumber] || undefined; // undefined for page 1
+        if (offsetToken) params.set('offset', offsetToken);
+
+        const url = `${base}?${params.toString()}`;
+        const data = await this.secureFetch(url);
+        this.currentPageRecords = Array.isArray(data.records) ? data.records.slice() : [];
+        // Cache next page's offset token
+        if (data.offset) {
+            this.pageOffsets[pageNumber + 1] = data.offset;
+        } else {
+            this.pageOffsets[pageNumber + 1] = null;
+        }
+
+        // Page-level client sort for latest/oldest using record.createdTime
+        if (this.sortOption === 'latest' || this.sortOption === 'oldest') {
+            const dir = this.sortOption === 'latest' ? -1 : 1;
+            this.currentPageRecords.sort((a, b) => (new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime()) * dir);
+        }
+
+        // Update page info with a temporary total if we don't have real total yet
+        this.updatePageInfoServer();
+    }
+
+    resetPagingAndReload() {
+        this.pageOffsets = [];
+        this.currentPage = 1;
+        this.totalCount = 0;
+        this.currentFilterKey = this.makeFilterKey();
+        this.loadUsers();
+    }
+
+    async goToPrevPage() {
+        if (this.currentPage <= 1) return;
+        this.currentPage -= 1;
+        await this.fetchPageRecords(this.currentPage);
+        this.renderUsersTable(this.currentPageRecords);
+    }
+
+    async goToNextPage() {
+        // If next page offset is known null, we are at the last page
+        const nextOffsetKnown = this.pageOffsets[this.currentPage + 1];
+        if (typeof nextOffsetKnown === 'undefined' && this.currentPage > 1) {
+            // Unknown state but should be rare; allow fetch to determine
+        }
+        if (nextOffsetKnown === null) return; // already at end
+        this.currentPage += 1;
+        await this.fetchPageRecords(this.currentPage);
+        this.renderUsersTable(this.currentPageRecords);
+    }
+
+    // Count total records for current filter (including search). Light-weight fields.
+    async countTotalRecords() {
+        const base = this.config.API.BASE_URL;
+        const params = new URLSearchParams();
+        params.set('pageSize', '100');
+        const filter = this.buildFilterFormula(true);
+        if (filter) params.set('filterByFormula', filter);
+        // Ask only for Username field to reduce payload
+        params.append('fields[]', 'Username');
+        let url = `${base}?${params.toString()}`;
+        let count = 0;
+        let guard = 0;
+        while (true) {
+            const data = await this.secureFetch(url);
+            count += (data.records || []).length;
+            if (data.offset && guard < 100) {
+                const u = new URL(url);
+                u.searchParams.set('offset', data.offset);
+                url = u.toString();
+                guard++;
+            } else {
+                break;
+            }
+        }
+        this.totalCount = count;
+        this.updatePageInfoServer();
+    }
+
+    renderUsersTable(records) { /* now renders a provided page slice */ 
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
-        if (this.allUsers.length === 0) {
+        const toRender = records || [];
+        if (toRender.length === 0) {
             tbody.innerHTML = `<tr><td colspan="10" style="text-align: center;">No users found.</td></tr>`;
             return;
         }
-        this.allUsers.forEach(({ id, fields: user }) => {
+        toRender.forEach(({ id, fields: user }) => {
             const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < Math.floor(Date.now() / 1000);
             const row = tbody.insertRow();
             let creditButton = '';
@@ -330,6 +498,54 @@ class VIPAdminPanel {
             }
             row.innerHTML = `<td>${user.Username || ''}</td><td>${user.Password || ''}</td><td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td><td>${user.Expiry === '9999' ? 'Never' : new Date(parseInt(user.Expiry) * 1000).toLocaleDateString()}</td><td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td><td>${user.CreatedBy || ''}</td><td><span class="status-badge ${isExpired ? 'status-expired' : 'status-active'}">${isExpired ? 'Expired' : 'Active'}</span></td><td class="action-buttons">${creditButton}<button onclick="app.resetHWID('${id}', '${user.Username}')" class="action-btn btn-warning">Reset HWID</button><button onclick="app.deleteUser('${id}', '${user.Username}')" class="action-btn btn-danger">Delete</button></td>`;
         });
+    }
+
+    // Server-mode: just update page info based on current page and totalCount
+    updatePageInfoServer() {
+        const startIndex = this.totalCount === 0 ? (this.currentPage - 1) * this.rowsPerPage : (this.currentPage - 1) * this.rowsPerPage;
+        const endIndexExclusive = startIndex + (this.currentPageRecords?.length || 0);
+        const total = this.totalCount || Math.max(endIndexExclusive, 0);
+        this.updatePageInfo(startIndex, endIndexExclusive, total);
+    }
+
+    getFilteredUsers(users) { // retained for potential future client-side mode
+        const q = this.searchQuery.trim();
+        if (!q) return users;
+        const lower = q.toLowerCase();
+        return users.filter(({ fields }) => String(fields.Username || '').toLowerCase().includes(lower));
+    }
+
+    getSortedUsers(users) { // retained for potential future client-side mode
+        const opt = this.sortOption;
+        const copied = users.slice();
+        if (opt === 'latest') {
+            // Sort by record createdTime DESC (latest first)
+            return copied.sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime());
+        }
+        if (opt === 'oldest') {
+            return copied.sort((a, b) => new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime());
+        }
+        if (opt === 'az') {
+            return copied.sort((a, b) => String(a.fields.Username || '').localeCompare(String(b.fields.Username || ''), undefined, { sensitivity: 'base' }));
+        }
+        if (opt === 'za') {
+            return copied.sort((a, b) => String(b.fields.Username || '').localeCompare(String(a.fields.Username || ''), undefined, { sensitivity: 'base' }));
+        }
+        return copied;
+    }
+
+    updatePageInfo(startIndex, endIndexExclusive, total) {
+        const pageInfo = document.getElementById('pageInfo');
+        const humanStart = total === 0 ? 0 : startIndex + 1;
+        const humanEnd = endIndexExclusive;
+        if (pageInfo) pageInfo.textContent = `${humanStart} – ${humanEnd} of ${total}`;
+        const prevBtn = document.getElementById('prevPageBtn');
+        const nextBtn = document.getElementById('nextPageBtn');
+        if (prevBtn) prevBtn.disabled = this.currentPage === 1 || total === 0;
+        if (nextBtn) {
+            // Disable next if we've reached last page based on totalCount, otherwise enable
+            nextBtn.disabled = endIndexExclusive >= total || this.pageOffsets[this.currentPage + 1] === null;
+        }
     }
     async giveCredits(recordId, username) { /* ... UNCHANGED ... */ 
         const amountStr = prompt(`How many credits to give to ${username}?`);
@@ -340,7 +556,7 @@ class VIPAdminPanel {
             return this.showNotification('Insufficient credits.', 'error');
         }
         try {
-            const targetUser = this.allUsers.find(u => u.id === recordId).fields;
+            const targetUser = (this.currentPageRecords.find(u => u.id === recordId) || this.allUsers.find(u => u.id === recordId)).fields;
             const newCreditTotal = (targetUser.Credits || 0) + amount;
             await this.updateUserCredits(recordId, newCreditTotal);
             if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
@@ -372,21 +588,49 @@ class VIPAdminPanel {
             const index = this.allUsers.findIndex(u => u.id === recordId);
             if (index > -1) {
                 this.allUsers.splice(index, 1);
-                this.renderUsersTable();
-                this.updateStats();
+                // Reload current page and refresh stats after deletion
+                await this.loadUsers();
             }
         } catch (error) { this.showNotification(`Failed to delete user: ${error.message}`, 'error'); }
     }
     async updateUserCredits(recordId, newCredits) { /* ... UNCHANGED ... */ 
         await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { Credits: newCredits } }] } });
     }
-    updateStats() { /* ... UNCHANGED ... */ 
-        const total = this.allUsers.length;
-        const active = this.allUsers.filter(({ fields }) => fields.Expiry === '9999' || parseInt(fields.Expiry) > Date.now() / 1000).length;
+    async updateStats() { /* now fetch lightweight pages to compute accurate counts */ 
+        const base = this.config.API.BASE_URL;
+        const params = new URLSearchParams();
+        params.set('pageSize', '100');
+        const accessOnly = this.buildFilterFormula(false); // exclude search for global stats
+        if (accessOnly) params.set('filterByFormula', accessOnly);
+        params.append('fields[]', 'Expiry');
+        params.append('fields[]', 'AccountType');
+        let url = `${base}?${params.toString()}`;
+        let total = 0, active = 0, reseller = 0;
+        let guard = 0;
+        const nowSec = Math.floor(Date.now() / 1000);
+        while (true) {
+            const data = await this.secureFetch(url);
+            const recs = data.records || [];
+            total += recs.length;
+            for (const r of recs) {
+                const f = r.fields || {};
+                const isActive = f.Expiry === '9999' || parseInt(f.Expiry) > nowSec;
+                if (isActive) active++;
+                if (f.AccountType === 'reseller') reseller++;
+            }
+            if (data.offset && guard < 100) {
+                const u = new URL(url);
+                u.searchParams.set('offset', data.offset);
+                url = u.toString();
+                guard++;
+            } else {
+                break;
+            }
+        }
         document.getElementById('totalUsers').textContent = total;
         document.getElementById('activeUsers').textContent = active;
         document.getElementById('expiredUsers').textContent = total - active;
-        document.getElementById('resellerCount').textContent = this.allUsers.filter(({ fields }) => fields.AccountType === 'reseller').length;
+        document.getElementById('resellerCount').textContent = reseller;
     }
     logout() { /* ... UNCHANGED ... */ 
         localStorage.removeItem('vip_session'); window.location.reload(); 
