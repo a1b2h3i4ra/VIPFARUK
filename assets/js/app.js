@@ -1,5 +1,5 @@
-// VIP FARUK 999 - Secure Application Logic (v16 - Auto-Delete Expired Users)
-class VIPAdminPanel {
+// ARMODS - Secure Application Logic (v16 - Auto-Delete Expired Users)
+class ARMODSAdminPanel {
     constructor() {
         this.currentUser = null;
         this.allUsers = [];
@@ -151,7 +151,7 @@ class VIPAdminPanel {
         } catch (error) {
             this.showError(error.message);
         } finally {
-            btn.disabled = false; btn.querySelector('span').textContent = 'Enter VIP Panel';
+            btn.disabled = false; btn.querySelector('span').textContent = 'Enter ARMODS Panel';
         }
     }
 
@@ -633,7 +633,7 @@ class VIPAdminPanel {
         document.getElementById('resellerCount').textContent = reseller;
     }
     logout() { /* ... UNCHANGED ... */ 
-        localStorage.removeItem('vip_session'); window.location.reload(); 
+        localStorage.removeItem('armods_session'); window.location.reload(); 
     }
     showError(message) { /* ... UNCHANGED ... */ 
         const el = document.getElementById('loginError');
@@ -646,4 +646,4 @@ class VIPAdminPanel {
         setTimeout(() => el.classList.remove('show'), 3000);
     }
 }
-const app = new VIPAdminPanel();
+const app = new ARMODSAdminPanel();
