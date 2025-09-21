@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Password Reset API (v9 - Hardened Airtable Logic)
+// ARMODS - Secure Password Reset API (v9 - Hardened Airtable Logic)
 export default async function handler(request, response) {
     const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN;
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
