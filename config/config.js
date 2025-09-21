@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Configuration (v11 - Final with New Credits)
+// ARMODS - Secure Configuration (v11 - Final with New Credits)
 const PROXY_URL = '/api/proxy';
 const AIRTABLE_BASE_URL = 'https://api.airtable.com/v0/appyns7Hg147GniSq/tbls64uNeAgvXrZge';
 
@@ -34,17 +34,17 @@ const CONFIG = {
 };
 
 function validateSession() {
-    const session = localStorage.getItem('vip_session');
+    const session = localStorage.getItem('armods_session');
     if (!session) return null;
     try {
         const data = JSON.parse(atob(session));
         if (Date.now() - data.timestamp > CONFIG.SECURITY.SESSION_TIMEOUT) {
-            localStorage.removeItem('vip_session'); return null;
+            localStorage.removeItem('armods_session'); return null;
         }
         return data;
-    } catch (e) { localStorage.removeItem('vip_session'); return null; }
+    } catch (e) { localStorage.removeItem('armods_session'); return null; }
 }
 
 function createSession(userData) {
-    localStorage.setItem('vip_session', btoa(JSON.stringify({ user: userData, timestamp: Date.now() })));
+    localStorage.setItem('armods_session', btoa(JSON.stringify({ user: userData, timestamp: Date.now() })));
 }
