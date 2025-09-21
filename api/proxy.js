@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure Server-Side Proxy (v3 - Final)
+// ARMODS - Secure Server-Side Proxy (v3 - Final)
 export default async function handler(request, response) {
     const airtableUrl = request.headers['x-airtable-url'];
     if (!airtableUrl) {
