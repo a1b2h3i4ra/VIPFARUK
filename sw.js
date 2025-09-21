@@ -1,7 +1,7 @@
-// VIP FARUK 999 - Service Worker (v2 with auto-update logic)
+// ARMODS - Service Worker (v2 with auto-update logic)
 
 // 1. Update the version number every time you deploy changes
-const CACHE_NAME = 'vip-faruk-999-cache-v2';
+const CACHE_NAME = 'armods-cache-v2';
 const urlsToCache = [
     '/',
     '/index.html',
