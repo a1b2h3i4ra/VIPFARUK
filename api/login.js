@@ -1,4 +1,4 @@
-// VIP FARUK 999 - Secure 2FA Login API (v1)
+// ARMODS - Secure 2FA Login API (v1)
 export default async function handler(request, response) {
     const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN;
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
