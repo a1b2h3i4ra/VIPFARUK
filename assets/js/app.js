@@ -226,17 +226,20 @@ class ARMODSAdminPanel {
             this.loadUsers();
         }
     }
-    async setupPermissions() { /* ... UNCHANGED ... */ 
+    async setupPermissions() { /* ... UPDATED BUSINESS RULES ... */ 
         const { AccountType, Username, Credits } = this.currentUser;
         const perms = this.config.HIERARCHY.PERMISSIONS[AccountType] || [];
         document.getElementById('userTypeBadge').textContent = AccountType.toUpperCase();
         document.getElementById('welcomeUser').textContent = `Welcome, ${Username}`;
         const creditsBadge = document.getElementById('creditsBadge');
-        if (AccountType === 'god' || AccountType === 'admin') { creditsBadge.style.display = 'none'; }
+        if (AccountType === 'god') { creditsBadge.style.display = 'none'; }
         else { creditsBadge.style.display = 'block'; document.getElementById('userCredits').textContent = Credits; }
         const expiryEl = document.getElementById('expiryPeriod');
-        if (AccountType === 'god' || AccountType === 'admin') {
+        if (AccountType === 'god') {
             expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="24">1 Day</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option><option value="9999">Never</option>`;
+        } else if (AccountType === 'admin') {
+            // Admin: remove 1 Day and Never options; keep 5m and 1h
+            expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
         } else {
             expiryEl.innerHTML = `<option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
         }
@@ -262,16 +265,23 @@ class ARMODSAdminPanel {
         document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
     }
 
-    updateCreateButtonText() { /* ... UNCHANGED ... */ 
+    updateCreateButtonText() { /* ... UPDATED FOR ADMIN COSTS ... */ 
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
-        if (AccountType === 'god' || AccountType === 'admin') {
+        if (AccountType === 'god') {
             btnText.textContent = `Create ${selectedType}`;
             return;
         }
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(selectedType);
-        const cost = isPrivileged ? (document.getElementById('creditsToGive').value || '0') : this.calculateCreditCost();
+        let cost;
+        if (isPrivileged) {
+            cost = (parseInt(document.getElementById('creditsToGive').value, 10) || 0);
+        } else {
+            const period = document.getElementById('expiryPeriod').value;
+            const isAdminFree = (AccountType === 'admin') && (period === '0.08333' || period === '1');
+            cost = isAdminFree ? 0 : this.calculateCreditCost();
+        }
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
     }
     calculateCreditCost() { /* ... UNCHANGED ... */ 
@@ -316,8 +326,15 @@ class ARMODSAdminPanel {
     async createUser(userData) {
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
-        if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
-            cost = isPrivileged ? userData.Credits : this.calculateCreditCost();
+        if (this.currentUser.AccountType !== 'god') {
+            if (isPrivileged) {
+                cost = userData.Credits;
+            } else {
+                const isAdmin = this.currentUser.AccountType === 'admin';
+                const period = userData.Expiry; // raw period value from form (e.g., '0.08333','1','168',...)
+                const isAdminFree = isAdmin && (period === '0.08333' || period === '1');
+                cost = isAdminFree ? 0 : this.calculateCreditCost();
+            }
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
         // --- THIS IS THE CORRECTED LINE ---
