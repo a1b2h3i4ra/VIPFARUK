@@ -7,6 +7,7 @@ class ARMODSAdminPanel {
         this.config = CONFIG;
         this.loginUsername = null; 
         this.resetUsername = null; 
+        this.allowedCreators = null; // hierarchy-based list of creator usernames current user can view; null => unrestricted (god)
         // Pagination, search, sort state
         this.currentPage = 1;
         this.rowsPerPage = 50;
@@ -143,6 +144,7 @@ class ARMODSAdminPanel {
                 document.getElementById('loginSection').style.display = 'none';
                 document.getElementById('dashboardSection').style.display = 'block';
                 await this.setupPermissions();
+                await this.computeAllowedCreators();
                 await this.loadUsers();
                 this.showNotification('Login successful!', 'success');
             } else {
@@ -223,7 +225,7 @@ class ARMODSAdminPanel {
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('dashboardSection').style.display = 'block';
             this.setupPermissions();
-            this.loadUsers();
+            this.computeAllowedCreators().then(() => this.loadUsers());
         }
     }
     async setupPermissions() { /* ... UPDATED BUSINESS RULES ... */ 
@@ -243,7 +245,12 @@ class ARMODSAdminPanel {
         } else {
             expiryEl.innerHTML = `<option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
         }
-        document.getElementById('deviceType').innerHTML = perms.includes('create_all') ? `<option value="single">Single</option><option value="double">Double</option><option value="unlimited">Unlimited</option>` : `<option value="single">Single</option><option value="double">Double</option>`;
+        // Device options: Admin should also have 'unlimited'
+        if (AccountType === 'god' || AccountType === 'admin') {
+            document.getElementById('deviceType').innerHTML = `<option value="single">Single</option><option value="double">Double</option><option value="unlimited">Unlimited</option>`;
+        } else {
+            document.getElementById('deviceType').innerHTML = `<option value="single">Single</option><option value="double">Double</option>`;
+        }
         let options = '<option value="user">User</option>';
         if (perms.includes('create_reseller')) options += '<option value="reseller">Reseller</option>';
         if (perms.includes('create_seller')) options += '<option value="seller">Seller</option>';
@@ -251,6 +258,46 @@ class ARMODSAdminPanel {
         document.getElementById('accountType').innerHTML = options;
         this.updateFormVisibility();
         this.updateCreateButtonText();
+    }
+
+    async computeAllowedCreators() {
+        // Determine which CreatedBy values are visible based on hierarchy
+        const { AccountType, Username } = this.currentUser;
+        if (AccountType === 'god') { this.allowedCreators = null; return; }
+        const creators = new Set([Username]);
+        const base = this.config.API.BASE_URL;
+        const params = new URLSearchParams();
+        params.set('pageSize', '100');
+        params.append('fields[]', 'Username');
+        params.append('fields[]', 'AccountType');
+        params.append('fields[]', 'CreatedBy');
+        // Determine which subordinate types to include
+        let subordinateFilter = '';
+        if (AccountType === 'admin') {
+            subordinateFilter = "OR({AccountType}='seller',{AccountType}='reseller')";
+        } else if (AccountType === 'seller') {
+            subordinateFilter = "{AccountType}='reseller'";
+        } else {
+            this.allowedCreators = Array.from(creators);
+            return;
+        }
+        // Fetch subordinate accounts created by current user
+        const filter = `AND(${subordinateFilter},{CreatedBy}='${this.escapeFormulaString(Username)}')`;
+        params.set('filterByFormula', filter);
+        let url = `${base}?${params.toString()}`;
+        let guard = 0;
+        while (true) {
+            const data = await this.secureFetch(url);
+            const recs = data.records || [];
+            for (const r of recs) { if (r.fields?.Username) creators.add(String(r.fields.Username)); }
+            if (data.offset && guard < 50) {
+                const u = new URL(url);
+                u.searchParams.set('offset', data.offset);
+                url = u.toString();
+                guard++;
+            } else { break; }
+        }
+        this.allowedCreators = Array.from(creators);
     }
 
     updateFormVisibility() { /* ... UNCHANGED ... */
@@ -265,7 +312,7 @@ class ARMODSAdminPanel {
         document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
     }
 
-    updateCreateButtonText() { /* ... UPDATED FOR ADMIN COSTS ... */ 
+    updateCreateButtonText() { /* ... UPDATED FOR ADMIN COSTS + UNLIMITED FREE ... */ 
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
@@ -279,8 +326,10 @@ class ARMODSAdminPanel {
             cost = (parseInt(document.getElementById('creditsToGive').value, 10) || 0);
         } else {
             const period = document.getElementById('expiryPeriod').value;
+            const device = document.getElementById('deviceType').value;
             const isAdminFree = (AccountType === 'admin') && (period === '0.08333' || period === '1');
-            cost = isAdminFree ? 0 : this.calculateCreditCost();
+            const isAdminUnlimitedFree = (AccountType === 'admin') && device === 'unlimited';
+            cost = (isAdminFree || isAdminUnlimitedFree) ? 0 : this.calculateCreditCost();
         }
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
     }
@@ -332,8 +381,10 @@ class ARMODSAdminPanel {
             } else {
                 const isAdmin = this.currentUser.AccountType === 'admin';
                 const period = userData.Expiry; // raw period value from form (e.g., '0.08333','1','168',...)
+                const device = userData.Device;
                 const isAdminFree = isAdmin && (period === '0.08333' || period === '1');
-                cost = isAdminFree ? 0 : this.calculateCreditCost();
+                const isAdminUnlimitedFree = isAdmin && device === 'unlimited';
+                cost = (isAdminFree || isAdminUnlimitedFree) ? 0 : this.calculateCreditCost();
             }
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
@@ -379,14 +430,13 @@ class ARMODSAdminPanel {
     // Build filterByFormula combining access control + optional search
     buildFilterFormula(includeSearch = true) {
         const clauses = [];
-        // Access filter based on account type
-        if (this.currentUser.AccountType === 'admin') {
-            clauses.push("NOT({AccountType}='god')");
-        } else if (this.currentUser.AccountType !== 'god') {
-            clauses.push(`{CreatedBy}='${this.escapeFormulaString(this.currentUser.Username)}'`);
+        // Access filter based on allowed creators
+        if (this.currentUser.AccountType !== 'god') {
+            const creators = this.allowedCreators || [this.currentUser.Username];
+            const orCreators = creators.map(c => `{CreatedBy}='${this.escapeFormulaString(c)}'`).join(',');
+            clauses.push(`OR(${orCreators})`);
         }
         if (includeSearch && this.searchQuery) {
-            // Case-insensitive search on Username
             const q = this.escapeFormulaString(this.searchQuery);
             clauses.push(`SEARCH('${q}', {Username})`);
         }
@@ -524,7 +574,8 @@ class ARMODSAdminPanel {
                 const daysLeft = Math.ceil(secondsLeft / 86400);
                 expiryDisplay = `<span class=\"expiry-days\">${daysLeft} days</span>`;
             }
-            row.innerHTML = `<td>${user.Username || ''}</td><td>${user.Password || ''}</td><td>${user.AccountType || 'user'}</td><td>${(user.AccountType === 'seller' || user.AccountType === 'reseller') ? user.Credits || 0 : '-'}</td><td>${expiryDisplay}</td><td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td><td>${user.CreatedBy || ''}</td><td><span class=\"status-badge ${isExpired ? 'status-expired' : 'status-active'}\">${isExpired ? 'Expired' : 'Active'}</span></td><td class=\"action-buttons\">${creditButton}<button onclick=\"app.resetHWID('${id}', '${user.Username}')\" class=\"action-btn btn-warning\">Reset HWID</button><button onclick=\"app.deleteUser('${id}', '${user.Username}')\" class=\"action-btn btn-danger\">Delete</button></td>`;
+            const showCredits = (user.AccountType === 'admin' || user.AccountType === 'seller' || user.AccountType === 'reseller');
+            row.innerHTML = `<td>${user.Username || ''}</td><td>${user.Password || ''}</td><td>${user.AccountType || 'user'}</td><td>${showCredits ? (user.Credits || 0) : '-'}</td><td>${expiryDisplay}</td><td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td><td>${user.CreatedBy || ''}</td><td><span class=\"status-badge ${isExpired ? 'status-expired' : 'status-active'}\">${isExpired ? 'Expired' : 'Active'}</span></td><td class=\"action-buttons\">${creditButton}<button onclick=\"app.resetHWID('${id}', '${user.Username}')\" class=\"action-btn btn-warning\">Reset HWID</button><button onclick=\"app.deleteUser('${id}', '${user.Username}')\" class=\"action-btn btn-danger\">Delete</button></td>`;
         });
     }
 
