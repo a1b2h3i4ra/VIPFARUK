@@ -1,7 +1,7 @@
-// ARMODS - Service Worker (v2 with auto-update logic)
+// WHITE X MODZ - Service Worker (v3 with auto-update logic)
 
 // 1. Update the version number every time you deploy changes
-const CACHE_NAME = 'armods-cache-v2';
+const CACHE_NAME = 'whitexmodz-cache-v3';
 const urlsToCache = [
     '/',
     '/index.html',
