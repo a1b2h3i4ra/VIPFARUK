@@ -151,7 +151,7 @@ class ARMODSAdminPanel {
         } catch (error) {
             this.showError(error.message);
         } finally {
-            btn.disabled = false; btn.querySelector('span').textContent = 'Enter ARMODS Panel';
+            btn.disabled = false; btn.querySelector('span').textContent = 'Enter WHITE X MODZ Panel';
         }
     }
 
