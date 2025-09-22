@@ -8,7 +8,7 @@ const CONFIG = {
     HIERARCHY: {
         PERMISSIONS: {
             god: ['create_all', 'create_admin', 'create_seller', 'create_reseller', 'create_user'],
-           admin: ['create_all', 'create_seller', 'create_reseller', 'create_user'],
+            admin: ['create_seller', 'create_reseller', 'create_user'],
             seller: ['create_reseller', 'create_user'],
             reseller: ['create_user']
         }
