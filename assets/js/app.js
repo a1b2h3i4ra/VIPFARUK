@@ -355,6 +355,11 @@ class ARMODSAdminPanel {
             TelegramID: form.newTelegramId.value.trim()
         };
 
+        // Ensure normal users start with 0 credits regardless of the input's default
+        if (userData.AccountType === 'user') {
+            userData.Credits = 0;
+        }
+
         if (!userData.Username || !userData.Password) {
             return this.showNotification('Username and password are required', 'error');
         }
@@ -561,7 +566,11 @@ class ARMODSAdminPanel {
             const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < nowSec;
             const row = tbody.insertRow();
             let creditButton = '';
-            if ((this.currentUser.AccountType === 'god' || this.currentUser.AccountType === 'admin' || this.currentUser.AccountType === 'seller') && (user.AccountType === 'seller' || user.AccountType === 'reseller')) {
+            const canGive = (
+                (this.currentUser.AccountType === 'god' && (user.AccountType === 'admin' || user.AccountType === 'seller' || user.AccountType === 'reseller')) ||
+                ((this.currentUser.AccountType === 'admin' || this.currentUser.AccountType === 'seller') && (user.AccountType === 'seller' || user.AccountType === 'reseller'))
+            );
+            if (canGive) {
                 creditButton = `<button onclick="app.giveCredits('${id}', '${user.Username}')" class="action-btn" style="background-color: var(--success);">Give Credits</button>`;
             }
             let expiryDisplay = '';
