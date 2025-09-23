@@ -234,16 +234,16 @@ class ARMODSAdminPanel {
         document.getElementById('userTypeBadge').textContent = AccountType.toUpperCase();
         document.getElementById('welcomeUser').textContent = `Welcome, ${Username}`;
         const creditsBadge = document.getElementById('creditsBadge');
-        if (AccountType === 'god') { creditsBadge.style.display = 'none'; }
+        if (AccountType === 'god' || AccountType === 'admin') { creditsBadge.style.display = 'none'; }
         else { creditsBadge.style.display = 'block'; document.getElementById('userCredits').textContent = Credits; }
         const expiryEl = document.getElementById('expiryPeriod');
         if (AccountType === 'god') {
-            expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="24">1 Day</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option><option value="9999">Never</option>`;
+            expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="24">1 Day</option><option value="120">5 Days</option><option value="240" selected>10 Days</option><option value="480">20 Days</option><option value="720">30 Days</option><option value="9999">Never</option>`;
         } else if (AccountType === 'admin') {
-            // Admin: remove 1 Day and Never options; keep 5m and 1h
-            expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
+            // Admin: remove 1 Day and Never options; keep 5m and 1h; include 5/10/20/30 days
+            expiryEl.innerHTML = `<option value="0.08333">5 Minutes</option><option value="1">1 Hour</option><option value="120">5 Days</option><option value="240" selected>10 Days</option><option value="480">20 Days</option><option value="720">30 Days</option>`;
         } else {
-            expiryEl.innerHTML = `<option value="168" selected>7 Days</option><option value="360">15 Days</option><option value="720">30 Days</option>`;
+            expiryEl.innerHTML = `<option value="120">5 Days</option><option value="240" selected>10 Days</option><option value="480">20 Days</option><option value="720">30 Days</option>`;
         }
         // Device options: Admin should also have 'unlimited'
         if (AccountType === 'god' || AccountType === 'admin') {
@@ -300,23 +300,26 @@ class ARMODSAdminPanel {
         this.allowedCreators = Array.from(creators);
     }
 
-    updateFormVisibility() { /* ... UNCHANGED ... */
+    updateFormVisibility() { /* ... UPDATED: credits only for seller/reseller ... */
         const accountType = document.getElementById('accountType').value;
-        const isPrivileged = ['admin', 'seller', 'reseller'].includes(accountType);
-        const needsTelegramId = ['seller', 'reseller'].includes(accountType);
+        const isAdminOrHigher = ['admin'].includes(accountType);
+        const isSellerOrReseller = ['seller', 'reseller'].includes(accountType);
+        const needsTelegramId = isSellerOrReseller;
 
-        document.getElementById('creditsGroup').style.display = isPrivileged ? 'block' : 'none';
+        document.getElementById('creditsGroup').style.display = isSellerOrReseller ? 'block' : 'none';
         document.getElementById('telegramIdGroup').style.display = needsTelegramId ? 'block' : 'none';
         
-        document.getElementById('expiryPeriod').parentElement.style.display = isPrivileged ? 'none' : 'block';
-        document.getElementById('deviceType').parentElement.style.display = isPrivileged ? 'none' : 'block';
+        // Hide expiry/device for admin/seller/reseller accounts (privileged accounts get never-expiry)
+        const isPrivilegedForExpiry = isAdminOrHigher || isSellerOrReseller;
+        document.getElementById('expiryPeriod').parentElement.style.display = isPrivilegedForExpiry ? 'none' : 'block';
+        document.getElementById('deviceType').parentElement.style.display = isPrivilegedForExpiry ? 'none' : 'block';
     }
 
     updateCreateButtonText() { /* ... UPDATED FOR ADMIN COSTS + UNLIMITED FREE ... */ 
         const btnText = document.getElementById('createUserBtn').querySelector('span');
         const { AccountType } = this.currentUser;
         const selectedType = document.getElementById('accountType').value;
-        if (AccountType === 'god') {
+        if (AccountType === 'god' || AccountType === 'admin') {
             btnText.textContent = `Create ${selectedType}`;
             return;
         }
@@ -327,9 +330,7 @@ class ARMODSAdminPanel {
         } else {
             const period = document.getElementById('expiryPeriod').value;
             const device = document.getElementById('deviceType').value;
-            const isAdminFree = (AccountType === 'admin') && (period === '0.08333' || period === '1');
-            const isAdminUnlimitedFree = (AccountType === 'admin') && device === 'unlimited';
-            cost = (isAdminFree || isAdminUnlimitedFree) ? 0 : this.calculateCreditCost();
+            cost = this.calculateCreditCost();
         }
         btnText.textContent = `Create ${selectedType} (-${cost} Credits)`;
     }
@@ -380,16 +381,13 @@ class ARMODSAdminPanel {
     async createUser(userData) {
         let cost = 0;
         const isPrivileged = ['admin', 'seller', 'reseller'].includes(userData.AccountType);
-        if (this.currentUser.AccountType !== 'god') {
+        if (this.currentUser.AccountType !== 'god' && this.currentUser.AccountType !== 'admin') {
             if (isPrivileged) {
                 cost = userData.Credits;
             } else {
-                const isAdmin = this.currentUser.AccountType === 'admin';
                 const period = userData.Expiry; // raw period value from form (e.g., '0.08333','1','168',...)
                 const device = userData.Device;
-                const isAdminFree = isAdmin && (period === '0.08333' || period === '1');
-                const isAdminUnlimitedFree = isAdmin && device === 'unlimited';
-                cost = (isAdminFree || isAdminUnlimitedFree) ? 0 : this.calculateCreditCost();
+                cost = this.calculateCreditCost();
             }
             if (this.currentUser.Credits < cost) throw new Error('Insufficient credits.');
         }
@@ -583,17 +581,9 @@ class ARMODSAdminPanel {
                 const daysLeft = Math.ceil(secondsLeft / 86400);
                 expiryDisplay = `<span class=\"expiry-days\">${daysLeft} days</span>`;
             }
-            const showCredits = (user.AccountType === 'admin' || user.AccountType === 'seller' || user.AccountType === 'reseller');
+            const showCredits = (user.AccountType === 'seller' || user.AccountType === 'reseller');
             row.innerHTML = `<td>${user.Username || ''}</td><td>${user.Password || ''}</td><td>${user.AccountType || 'user'}</td><td>${showCredits ? (user.Credits || 0) : '-'}</td><td>${expiryDisplay}</td><td>${user.Device || 'Single'}</td><td>${user.HWID ? 'SET' : 'NONE'}</td><td>${user.CreatedBy || ''}</td><td><span class=\"status-badge ${isExpired ? 'status-expired' : 'status-active'}\">${isExpired ? 'Expired' : 'Active'}</span></td><td class=\"action-buttons\">${creditButton}<button onclick=\"app.resetHWID('${id}', '${user.Username}')\" class=\"action-btn btn-warning\">Reset HWID</button><button onclick=\"app.deleteUser('${id}', '${user.Username}')\" class=\"action-btn btn-danger\">Delete</button></td>`;
         });
-    }
-
-    // Server-mode: just update page info based on current page and totalCount
-    updatePageInfoServer() {
-        const startIndex = this.totalCount === 0 ? (this.currentPage - 1) * this.rowsPerPage : (this.currentPage - 1) * this.rowsPerPage;
-        const endIndexExclusive = startIndex + (this.currentPageRecords?.length || 0);
-        const total = this.totalCount || Math.max(endIndexExclusive, 0);
-        this.updatePageInfo(startIndex, endIndexExclusive, total);
     }
 
     getFilteredUsers(users) { // retained for potential future client-side mode
