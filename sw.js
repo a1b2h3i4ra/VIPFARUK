@@ -1,7 +1,7 @@
-// WHITE X MODZ - Service Worker (v3 with auto-update logic)
+// INFINITY TEAM PRO - Service Worker (v1 with auto-update logic)
 
 // 1. Update the version number every time you deploy changes
-const CACHE_NAME = 'whitexmodz-cache-v3';
+const CACHE_NAME = 'infinityteampro-cache-v1';
 const urlsToCache = [
     '/',
     '/index.html',
