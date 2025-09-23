@@ -153,7 +153,7 @@ class ARMODSAdminPanel {
         } catch (error) {
             this.showError(error.message);
         } finally {
-            btn.disabled = false; btn.querySelector('span').textContent = 'Enter WHITE X MODZ Panel';
+            btn.disabled = false; btn.querySelector('span').textContent = 'Enter INFINITY TEAM PRO Panel';
         }
     }
 
