@@ -14,16 +14,16 @@ const CONFIG = {
         }
     },
     CREDITS: {
-        // UPDATED PRICING TO MATCH YOUR REQUIREMENTS
+        // UPDATED PRICING TO MATCH NEW REQUIREMENTS
         PRICING: {
-            '120': 0.5,       // 5 days (single)
+            '120': 0.5,      // 5 days (single)
             '240': 1,        // 10 days (single)
             '480': 2,        // 20 days (single)
             '720': 3,        // 30 days (single)
-            // Admin/God only options
-            '0.08333': 0.5,
-            '1': 1,
-            '24': 2,
+            // Admin/God only options (short durations + Never)
+            '0.08333': 0.5,  // 5 minutes
+            '1': 1,          // 1 hour
+            '24': 2,         // 1 day
             '9999': 100
         },
         DEVICE_MULTIPLIER: {
