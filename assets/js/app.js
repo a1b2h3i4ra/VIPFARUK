@@ -384,8 +384,8 @@ class ARMODSAdminPanel {
             AccountType: form.accountType.value,
             Credits: parseInt(form.creditsToGive.value) || 0,
             TelegramID: form.newTelegramId.value.trim(),
-            // New field as requested: set Airtable 'verson' to 'v2' for every new account
-            Version: 'v2'
+            // New field as requested: set Airtable 'version' to 'v3' for every new account
+            Version: 'v3'
         };
 
         // Ensure normal users start with 0 credits regardless of the input's default
