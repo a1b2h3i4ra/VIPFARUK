@@ -94,6 +94,8 @@ class ARMODSAdminPanel {
         }
         document.getElementById('prevPageBtn')?.addEventListener('click', () => this.goToPrevPage());
         document.getElementById('nextPageBtn')?.addEventListener('click', () => this.goToNextPage());
+        // Bulk actions
+        document.getElementById('resetAllHwidBtn')?.addEventListener('click', () => this.resetAllHWIDs());
     }
 
     async handlePasswordSubmit(e) { /* ... UNCHANGED ... */ 
@@ -281,6 +283,11 @@ class ARMODSAdminPanel {
         document.getElementById('accountType').innerHTML = options;
         this.updateFormVisibility();
         this.updateCreateButtonText();
+        // Toggle bulk reset HWID visibility: allowed for god/admin/seller/reseller only
+        const bulkBtn = document.getElementById('resetAllHwidBtn');
+        if (bulkBtn) {
+            bulkBtn.style.display = (['god','admin','seller','reseller'].includes(AccountType)) ? 'inline-flex' : 'none';
+        }
     }
 
     async computeAllowedCreators() {
@@ -742,6 +749,64 @@ class ARMODSAdminPanel {
         document.getElementById('activeUsers').textContent = active;
         document.getElementById('expiredUsers').textContent = total - active;
         document.getElementById('resellerCount').textContent = reseller;
+    }
+    async resetAllHWIDs() { /* bulk HWID reset respecting hierarchy */
+        const confirmMsg = this.currentUser?.AccountType === 'god'
+            ? 'Reset HWID for ALL visible accounts? This may affect a large number of users.'
+            : 'Reset HWID for all accounts created by you and your subordinates?';
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            // Build access-only filter (respect hierarchy; exclude search)
+            const base = this.config.API.BASE_URL;
+            const params = new URLSearchParams();
+            params.set('pageSize', '100');
+            const accessOnly = this.buildFilterFormula(false);
+            if (accessOnly) params.set('filterByFormula', accessOnly);
+            // Request only needed fields to reduce payload
+            params.append('fields[]', 'Username');
+            params.append('fields[]', 'HWID');
+            params.append('fields[]', 'HWID2');
+
+            let url = `${base}?${params.toString()}`;
+            let toUpdate = [];
+            let guard = 0;
+            while (true) {
+                const data = await this.secureFetch(url);
+                const recs = data.records || [];
+                for (const r of recs) {
+                    const f = r.fields || {};
+                    if ((f.HWID && f.HWID.trim() !== '') || (f.HWID2 && f.HWID2.trim() !== '')) {
+                        toUpdate.push({ id: r.id, fields: { HWID: '', HWID2: '' } });
+                    }
+                }
+                if (data.offset && guard < 200) {
+                    const u = new URL(url);
+                    u.searchParams.set('offset', data.offset);
+                    url = u.toString();
+                    guard++;
+                } else {
+                    break;
+                }
+            }
+
+            if (toUpdate.length === 0) {
+                this.showNotification('No HWIDs to reset in your scope.', 'success');
+                return;
+            }
+
+            // Airtable limits 10 records per PATCH request; chunk accordingly
+            const chunkSize = 10;
+            for (let i = 0; i < toUpdate.length; i += chunkSize) {
+                const chunk = toUpdate.slice(i, i + chunkSize);
+                await this.secureFetch(base, { method: 'PATCH', body: { records: chunk } });
+            }
+
+            this.showNotification(`Reset HWID for ${toUpdate.length} account(s).`, 'success');
+            await this.loadUsers();
+        } catch (error) {
+            this.showNotification(`Failed to reset all HWIDs: ${error.message}`, 'error');
+        }
     }
     logout() { /* ... UNCHANGED ... */ 
         localStorage.removeItem('armods_session'); window.location.reload(); 
