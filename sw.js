@@ -1,7 +1,8 @@
 // INFINITY TEAM PRO - Service Worker (v1 with auto-update logic)
 
 // 1. Update the version number every time you deploy changes
-const CACHE_NAME = 'infinityteampro-cache-v1';
+// Bump this to force clients to download fresh assets
+const CACHE_NAME = 'infinityteampro-cache-v2';
 const urlsToCache = [
     '/',
     '/index.html',
@@ -18,6 +19,7 @@ self.addEventListener('install', event => {
                 console.log('Opened cache');
                 return cache.addAll(urlsToCache);
             })
+            .then(() => self.skipWaiting())
     );
 });
 
@@ -34,20 +36,42 @@ self.addEventListener('activate', event => {
                     }
                 })
             );
-        })
+        }).then(() => self.clients.claim())
     );
 });
 
 // Serve content from cache first, then network
+// Use network-first for HTML and core JS/CSS so updates are picked up immediately
 self.addEventListener('fetch', event => {
+    const req = event.request;
+    const accept = req.headers.get('accept') || '';
+    const url = new URL(req.url);
+
+    const isHTML = req.mode === 'navigate' || accept.includes('text/html');
+    const isCoreAsset = /\.(?:js|css)$/.test(url.pathname) || url.pathname.endsWith('/assets/js/app.js') || url.pathname.endsWith('/config/config.js');
+
+    if (isHTML || isCoreAsset) {
+        event.respondWith(
+            fetch(req)
+                .then(networkRes => {
+                    const resClone = networkRes.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(req, resClone));
+                    return networkRes;
+                })
+                .catch(() => caches.match(req))
+        );
+        return;
+    }
+
+    // For other assets, use cache-first with network fallback and then cache
     event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                // Cache hit - return response
-                if (response) {
-                    return response;
-                }
-                return fetch(event.request);
-            })
+        caches.match(req).then(cached => {
+            if (cached) return cached;
+            return fetch(req).then(networkRes => {
+                const resClone = networkRes.clone();
+                caches.open(CACHE_NAME).then(cache => cache.put(req, resClone));
+                return networkRes;
+            });
+        })
     );
 });
