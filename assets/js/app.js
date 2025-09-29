@@ -385,7 +385,9 @@ class ARMODSAdminPanel {
             Credits: parseInt(form.creditsToGive.value) || 0,
             TelegramID: form.newTelegramId.value.trim(),
             // New field as requested: set Airtable 'version' to 'v3' for every new account
-            Version: 'v3'
+            Version: 'v3',
+            // New field: APK Mod flag -> Airtable field 'apk' should be 'yes' or 'no'
+            apk: document.getElementById('apkmod')?.checked ? 'yes' : 'no'
         };
 
         // Ensure normal users start with 0 credits regardless of the input's default
