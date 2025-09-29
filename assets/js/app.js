@@ -732,7 +732,27 @@ class ARMODSAdminPanel {
             total += recs.length;
             for (const r of recs) {
                 const f = r.fields || {};
-                const isActive = f.Expiry === '9999' || parseInt(f.Expiry) > nowSec;
+                let isActive = false;
+                const exp = f.Expiry;
+                if (exp === '9999') {
+                    isActive = true;
+                } else if (typeof exp === 'number') {
+                    // Normalize: if milliseconds, convert to seconds
+                    const expSec = exp > 1e12 ? Math.floor(exp / 1000) : exp;
+                    isActive = expSec > nowSec;
+                } else if (typeof exp === 'string') {
+                    const num = parseInt(exp, 10);
+                    if (!Number.isNaN(num)) {
+                        const expSec = num > 1e12 ? Math.floor(num / 1000) : num;
+                        isActive = expSec > nowSec;
+                    } else {
+                        // Try parsing as ISO datetime
+                        const ms = Date.parse(exp);
+                        if (!Number.isNaN(ms)) {
+                            isActive = Math.floor(ms / 1000) > nowSec;
+                        }
+                    }
+                }
                 if (isActive) active++;
                 if (f.AccountType === 'reseller') reseller++;
             }
