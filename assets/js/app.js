@@ -20,6 +20,80 @@ class ARMODSAdminPanel {
         this.currentFilterKey = '';
         this.init();
     }
+    async extendAllUsers() {
+        // Only admin or god may perform this action
+        if (!(this.currentUser?.AccountType === 'god' || this.currentUser?.AccountType === 'admin')) {
+            this.showNotification('You do not have permission to perform this action.', 'error');
+            return;
+        }
+        const daysStr = prompt('Enter number of days to extend for all users:');
+        if (!daysStr) return;
+        const days = parseFloat(daysStr);
+        if (!isFinite(days) || days <= 0) {
+            this.showNotification('Please enter a valid positive number of days.', 'error');
+            return;
+        }
+        const extendSeconds = Math.round(days * 86400);
+
+        if (!confirm(`Extend all accessible users by ${days} day(s)?`)) return;
+
+        try {
+            const base = this.config.API.BASE_URL;
+            const params = new URLSearchParams();
+            params.set('pageSize', '100');
+            // Build access filter and restrict to AccountType='user'
+            const accessOnly = this.buildFilterFormula(false);
+            let filter = `{AccountType}='user'`;
+            if (accessOnly) filter = `AND(${accessOnly},${filter})`;
+            params.set('filterByFormula', filter);
+            // Minimal fields needed
+            params.append('fields[]', 'Username');
+            params.append('fields[]', 'Expiry');
+            params.append('fields[]', 'AccountType');
+            let url = `${base}?${params.toString()}`;
+
+            const toUpdate = [];
+            let guard = 0;
+            const nowSec = Math.floor(Date.now() / 1000);
+            while (true) {
+                const data = await this.secureFetch(url);
+                const recs = data.records || [];
+                for (const r of recs) {
+                    const f = r.fields || {};
+                    if (String(f.AccountType) !== 'user') continue;
+                    const cur = parseInt(f.Expiry, 10);
+                    if (isNaN(cur)) continue; // skip invalid
+                    const baseTime = Math.max(cur, nowSec);
+                    const newExpiry = String(baseTime + extendSeconds);
+                    toUpdate.push({ id: r.id, fields: { Expiry: newExpiry } });
+                }
+                if (data.offset && guard < 200) {
+                    const u = new URL(url);
+                    u.searchParams.set('offset', data.offset);
+                    url = u.toString();
+                    guard++;
+                } else { break; }
+            }
+
+            if (toUpdate.length === 0) {
+                this.showNotification('No user records found to extend.', 'success');
+                return;
+            }
+
+            // Batch PATCH
+            const chunkSize = 10;
+            let processed = 0;
+            for (let i = 0; i < toUpdate.length; i += chunkSize) {
+                const batch = toUpdate.slice(i, i + chunkSize);
+                await this.secureFetch(base, { method: 'PATCH', body: { records: batch } });
+                processed += batch.length;
+            }
+            this.showNotification(`Extended ${processed} user(s) by ${days} day(s).`, 'success');
+            await this.loadUsers();
+        } catch (error) {
+            this.showNotification('Failed to extend users: ' + error.message, 'error');
+        }
+    }
 
     init() {
         this.setupEventListeners();
@@ -96,6 +170,8 @@ class ARMODSAdminPanel {
         document.getElementById('nextPageBtn')?.addEventListener('click', () => this.goToNextPage());
         // Admin/God: Reset All Keys button
         document.getElementById('resetAllKeysBtn')?.addEventListener('click', () => this.resetAllKeys());
+        // Admin/God: Extend All Users button
+        document.getElementById('extendAllUsersBtn')?.addEventListener('click', () => this.extendAllUsers());
     }
 
     async handlePasswordSubmit(e) { /* ... UNCHANGED ... */ 
@@ -247,6 +323,11 @@ class ARMODSAdminPanel {
         const resetBtn = document.getElementById('resetAllKeysBtn');
         if (resetBtn) {
             resetBtn.style.display = (AccountType === 'god' || AccountType === 'admin') ? 'inline-flex' : 'none';
+        }
+        // Toggle Extend All Users button visibility based on role
+        const extendBtn = document.getElementById('extendAllUsersBtn');
+        if (extendBtn) {
+            extendBtn.style.display = (AccountType === 'god' || AccountType === 'admin') ? 'inline-flex' : 'none';
         }
         const expiryEl = document.getElementById('expiryPeriod');
         if (AccountType === 'god') {
