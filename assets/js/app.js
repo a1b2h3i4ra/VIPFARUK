@@ -718,58 +718,59 @@ class ARMODSAdminPanel {
     }
     async updateStats() { /* compute users-only totals; resellers counted separately */ 
         const base = this.config.API.BASE_URL;
-        const params = new URLSearchParams();
-        params.set('pageSize', '100');
         const accessOnly = this.buildFilterFormula(false); // exclude search for global stats
-        if (accessOnly) params.set('filterByFormula', accessOnly);
-        params.append('fields[]', 'Expiry');
-        params.append('fields[]', 'AccountType');
-        let url = `${base}?${params.toString()}`;
-        let total = 0, active = 0, reseller = 0;
-        let guard = 0;
         const nowSec = Math.floor(Date.now() / 1000);
-        while (true) {
-            const data = await this.secureFetch(url);
-            const recs = data.records || [];
-            for (const r of recs) {
-                const f = r.fields || {};
-                // Reseller metric
-                if (f.AccountType === 'reseller') reseller++;
 
-                // Only count normal users for totals
-                if (f.AccountType === 'user') {
-                    total++;
-                    let isActive = false;
-                    const exp = f.Expiry;
-                    if (exp === '9999') {
-                        isActive = true;
-                    } else if (typeof exp === 'number') {
-                        const expSec = exp > 1e12 ? Math.floor(exp / 1000) : exp;
-                        isActive = expSec > nowSec;
-                    } else if (typeof exp === 'string') {
-                        const num = parseInt(exp, 10);
-                        if (!Number.isNaN(num)) {
-                            const expSec = num > 1e12 ? Math.floor(num / 1000) : num;
-                            isActive = expSec > nowSec;
-                        } else {
-                            const ms = Date.parse(exp);
-                            if (!Number.isNaN(ms)) {
-                                isActive = Math.floor(ms / 1000) > nowSec;
-                            }
-                        }
-                    }
-                    if (isActive) active++;
+        // Helper to page through results
+        const pageAll = async (extraFilter, fields) => {
+            const params = new URLSearchParams();
+            params.set('pageSize', '100');
+            if (fields && fields.length) fields.forEach(f => params.append('fields[]', f));
+            // Compose Airtable filter formula
+            let filter = extraFilter;
+            if (accessOnly && extraFilter) filter = `AND(${accessOnly},${extraFilter})`;
+            else if (accessOnly) filter = accessOnly;
+            if (filter) params.set('filterByFormula', filter);
+            let url = `${base}?${params.toString()}`;
+            let guard = 0;
+            const pages = [];
+            while (true) {
+                const data = await this.secureFetch(url);
+                pages.push(...(data.records || []));
+                if (data.offset && guard < 100) {
+                    const u = new URL(url);
+                    u.searchParams.set('offset', data.offset);
+                    url = u.toString();
+                    guard++;
+                } else { break; }
+            }
+            return pages;
+        };
+
+        // 1) Users-only stats
+        const userRecords = await pageAll("{AccountType}='user'", ['Expiry', 'AccountType']);
+        let total = 0, active = 0;
+        for (const r of userRecords) {
+            total++;
+            const exp = r.fields?.Expiry;
+            let isActive = false;
+            if (exp === '9999') isActive = true;
+            else if (typeof exp === 'number') isActive = (exp > 1e12 ? Math.floor(exp / 1000) : exp) > nowSec;
+            else if (typeof exp === 'string') {
+                const num = parseInt(exp, 10);
+                if (!Number.isNaN(num)) isActive = (num > 1e12 ? Math.floor(num / 1000) : num) > nowSec;
+                else {
+                    const ms = Date.parse(exp);
+                    if (!Number.isNaN(ms)) isActive = Math.floor(ms / 1000) > nowSec;
                 }
             }
-            if (data.offset && guard < 100) {
-                const u = new URL(url);
-                u.searchParams.set('offset', data.offset);
-                url = u.toString();
-                guard++;
-            } else {
-                break;
-            }
+            if (isActive) active++;
         }
+
+        // 2) Reseller count
+        const resellerRecords = await pageAll("{AccountType}='reseller'", ['AccountType']);
+        const reseller = resellerRecords.length;
+
         document.getElementById('totalUsers').textContent = total;
         document.getElementById('activeUsers').textContent = active;
         document.getElementById('expiredUsers').textContent = Math.max(total - active, 0);
