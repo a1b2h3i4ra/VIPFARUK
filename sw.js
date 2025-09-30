@@ -2,7 +2,7 @@
 
 // 1. Update the version number every time you deploy changes
 // Bump this to force clients to download fresh assets
-const CACHE_NAME = 'infinityteampro-cache-v3';
+const CACHE_NAME = 'infinityteampro-cache-v4';
 const urlsToCache = [
     '/',
     '/index.html',
@@ -47,6 +47,12 @@ self.addEventListener('fetch', event => {
     const accept = req.headers.get('accept') || '';
     const url = new URL(req.url);
 
+    // Never cache API calls or non-GET requests
+    if (req.method !== 'GET' || url.pathname.startsWith('/api/')) {
+        event.respondWith(fetch(req));
+        return;
+    }
+
     const isHTML = req.mode === 'navigate' || accept.includes('text/html');
     const isCoreAsset = /\.(?:js|css)$/.test(url.pathname) || url.pathname.endsWith('/assets/js/app.js') || url.pathname.endsWith('/config/config.js');
 
@@ -63,7 +69,7 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // For other assets, use cache-first with network fallback and then cache
+    // For other GET assets, use cache-first with network fallback and then cache
     event.respondWith(
         caches.match(req).then(cached => {
             if (cached) return cached;
