@@ -12,7 +12,8 @@ class ARMODSAdminPanel {
         this.currentPage = 1;
         this.rowsPerPage = 50;
         this.searchQuery = '';
-        this.sortOption = 'latest';
+        this.sortOption = 'hierarchy';
+        this.typeFilter = 'all';
         // Server-side paging helpers
         this.pageOffsets = []; // page index -> offset token for that page
         this.totalCount = 0; // total count for current filter
@@ -82,7 +83,7 @@ class ARMODSAdminPanel {
             this.resetPagingAndReload();
         });
         document.getElementById('sortSelect')?.addEventListener('change', (e) => {
-            this.sortOption = e.target.value || 'latest';
+            this.sortOption = e.target.value || 'hierarchy';
             this.resetPagingAndReload();
         });
         const rowsSelect = document.getElementById('rowsPerPageSelect');
@@ -90,6 +91,14 @@ class ARMODSAdminPanel {
             this.rowsPerPage = parseInt(rowsSelect.value, 10) || 50;
             rowsSelect.addEventListener('change', (e) => {
                 this.rowsPerPage = parseInt(e.target.value, 10) || 50;
+                this.resetPagingAndReload();
+            });
+        }
+        const typeSelect = document.getElementById('typeFilterSelect');
+        if (typeSelect) {
+            this.typeFilter = typeSelect.value || 'all';
+            typeSelect.addEventListener('change', (e) => {
+                this.typeFilter = e.target.value || 'all';
                 this.resetPagingAndReload();
             });
         }
@@ -473,6 +482,10 @@ class ARMODSAdminPanel {
             const orCreators = creators.map(c => `{CreatedBy}='${this.escapeFormulaString(c)}'`).join(',');
             clauses.push(`OR(${orCreators})`);
         }
+        // Optional type filter
+        if (this.typeFilter && this.typeFilter !== 'all') {
+            clauses.push(`{AccountType}='${this.escapeFormulaString(this.typeFilter)}'`);
+        }
         if (includeSearch && this.searchQuery) {
             const q = this.escapeFormulaString(this.searchQuery);
             clauses.push(`SEARCH('${q}', {Username})`);
@@ -492,7 +505,8 @@ class ARMODSAdminPanel {
             this.currentUser?.Username,
             this.rowsPerPage,
             this.searchQuery,
-            this.sortOption
+            this.sortOption,
+            this.typeFilter
         ].join('|');
     }
 
@@ -524,6 +538,15 @@ class ARMODSAdminPanel {
         if (this.sortOption === 'latest' || this.sortOption === 'oldest') {
             const dir = this.sortOption === 'latest' ? -1 : 1;
             this.currentPageRecords.sort((a, b) => (new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime()) * dir);
+        } else if (this.sortOption === 'hierarchy') {
+            // Custom order: god -> admin -> seller -> reseller -> user
+            const rank = (rec) => this.getHierarchyRank(String(rec.fields?.AccountType || 'user'));
+            this.currentPageRecords.sort((a, b) => {
+                const ra = rank(a), rb = rank(b);
+                if (ra !== rb) return ra - rb;
+                // Within same group, show latest first
+                return new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime();
+            });
         }
 
         // Update page info with a temporary total if we don't have real total yet
@@ -593,9 +616,23 @@ class ARMODSAdminPanel {
             tbody.innerHTML = `<tr><td colspan="10" style="text-align: center;">No users found.</td></tr>`;
             return;
         }
+        let currentGroup = null;
+        const labelFor = (t) => String(t || 'user').toUpperCase();
+        const order = ['god','admin','seller','reseller','user'];
+        const typeRank = (t) => order.indexOf(String(t || 'user').toLowerCase());
         toRender.forEach(({ id, fields: user }) => {
             const nowSec = Math.floor(Date.now() / 1000);
-            const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < nowSec;
+            const { isNever, isExpired, daysLeft } = this.parseExpiry(user.Expiry, nowSec, String(user.AccountType || 'user'));
+            // Insert group header when account type changes in hierarchy sequence
+            const thisType = String(user.AccountType || 'user').toLowerCase();
+            if (currentGroup === null || typeRank(thisType) !== typeRank(currentGroup)) {
+                currentGroup = thisType;
+                const gh = tbody.insertRow();
+                gh.className = 'group-row';
+                const cell = gh.insertCell();
+                cell.colSpan = 10;
+                cell.innerHTML = `<div class="group-title">${labelFor(thisType)}</div>`;
+            }
             const row = tbody.insertRow();
             let creditButton = '';
             const canGive = (
@@ -606,14 +643,14 @@ class ARMODSAdminPanel {
                 creditButton = `<button onclick="app.giveCredits('${id}', '${user.Username}')" class="action-btn" style="background-color: var(--success);">Give Credits</button>`;
             }
             let expiryDisplay = '';
-            if (user.Expiry === '9999') {
+            if (isNever) {
                 expiryDisplay = '<span class="expiry-days">Never</span>';
             } else if (isExpired) {
                 expiryDisplay = '<span class="expiry-expired">Expired</span>';
-            } else {
-                const secondsLeft = parseInt(user.Expiry) - nowSec;
-                const daysLeft = Math.ceil(secondsLeft / 86400);
+            } else if (Number.isFinite(daysLeft)) {
                 expiryDisplay = `<span class=\"expiry-days\">${daysLeft} days</span>`;
+            } else {
+                expiryDisplay = '<span class="expiry-days">-</span>';
             }
             // Only show credits for seller and reseller; not for admin
             const showCredits = (user.AccountType === 'seller' || user.AccountType === 'reseller');
@@ -719,7 +756,7 @@ class ARMODSAdminPanel {
     }
     async updateStats() { /* compute users-only totals; resellers counted separately */ 
         const base = this.config.API.BASE_URL;
-        const accessOnly = this.buildFilterFormula(false); // exclude search for global stats
+        const accessOnly = this.buildAccessOnlyFilter(); // exclude search and type filter for global stats
         const nowSec = Math.floor(Date.now() / 1000);
 
         // Helper to page through results
@@ -772,10 +809,59 @@ class ARMODSAdminPanel {
         const resellerRecords = await pageAll("{AccountType}='reseller'", ['AccountType']);
         const reseller = resellerRecords.length;
 
+        // 3) Seller and Admin counts
+        const sellerRecords = await pageAll("{AccountType}='seller'", ['AccountType']);
+        const adminRecords = await pageAll("{AccountType}='admin'", ['AccountType']);
+        const godRecords = await pageAll("{AccountType}='god'", ['AccountType']);
+        const sellers = sellerRecords.length;
+        const admins = adminRecords.length;
+        const gods = godRecords.length;
+
         document.getElementById('totalUsers').textContent = total;
         document.getElementById('activeUsers').textContent = active;
         document.getElementById('expiredUsers').textContent = Math.max(total - active, 0);
         document.getElementById('resellerCount').textContent = reseller;
+        document.getElementById('sellerCount')?.textContent = sellers;
+        document.getElementById('adminCount')?.textContent = admins;
+        document.getElementById('godCount')?.textContent = gods;
+    }
+
+    buildAccessOnlyFilter() {
+        if (!this.currentUser || this.currentUser.AccountType === 'god') return '';
+        const creators = this.allowedCreators || [this.currentUser.Username];
+        const orCreators = creators.map(c => `{CreatedBy}='${this.escapeFormulaString(c)}'`).join(',');
+        return `OR(${orCreators})`;
+    }
+
+    getHierarchyRank(type) {
+        const map = { god: 0, admin: 1, seller: 2, reseller: 3, user: 4 };
+        return (type && map[type.toLowerCase()]) ?? 4;
+    }
+
+    parseExpiry(exp, nowSec, accountType) {
+        // Treat non-user types without explicit expiry as Never
+        if ((accountType !== 'user') && (exp === undefined || exp === null || exp === '')) {
+            return { isNever: true, isExpired: false, daysLeft: null };
+        }
+        if (exp === '9999' || exp === 9999 || String(exp).toLowerCase() === 'never') {
+            return { isNever: true, isExpired: false, daysLeft: null };
+        }
+        let expSec = null;
+        if (typeof exp === 'number') expSec = exp > 1e12 ? Math.floor(exp / 1000) : exp;
+        else if (typeof exp === 'string') {
+            const num = parseInt(exp, 10);
+            if (!Number.isNaN(num)) expSec = num > 1e12 ? Math.floor(num / 1000) : num;
+            else {
+                const ms = Date.parse(exp);
+                if (!Number.isNaN(ms)) expSec = Math.floor(ms / 1000);
+            }
+        }
+        if (expSec === null || Number.isNaN(expSec)) {
+            return { isNever: false, isExpired: false, daysLeft: null };
+        }
+        const isExpired = expSec <= nowSec;
+        const daysLeft = isExpired ? 0 : Math.ceil((expSec - nowSec) / 86400);
+        return { isNever: false, isExpired, daysLeft };
     }
     async resetAllHWIDs() { /* bulk HWID reset respecting hierarchy */
         const confirmMsg = this.currentUser?.AccountType === 'god'
