@@ -2,7 +2,7 @@
 
 // 1. Update the version number every time you deploy changes
 // Bump this to force clients to download fresh assets
-const CACHE_NAME = 'infinityteampro-cache-v2';
+const CACHE_NAME = 'infinityteampro-cache-v3';
 const urlsToCache = [
     '/',
     '/index.html',
