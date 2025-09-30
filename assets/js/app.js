@@ -30,6 +30,7 @@ class ARMODSAdminPanel {
         const fetchOptions = {
             method: options.method || 'GET',
             headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store',
         };
         if (!url.startsWith('/api/')) {
             fetchOptions.headers['x-airtable-url'] = url;
