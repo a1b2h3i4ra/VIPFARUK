@@ -12,8 +12,7 @@ class ARMODSAdminPanel {
         this.currentPage = 1;
         this.rowsPerPage = 50;
         this.searchQuery = '';
-        this.sortOption = 'hierarchy';
-        this.typeFilter = 'all';
+        this.sortOption = 'latest';
         // Server-side paging helpers
         this.pageOffsets = []; // page index -> offset token for that page
         this.totalCount = 0; // total count for current filter
@@ -31,7 +30,6 @@ class ARMODSAdminPanel {
         const fetchOptions = {
             method: options.method || 'GET',
             headers: { 'Content-Type': 'application/json' },
-            cache: 'no-store',
         };
         if (!url.startsWith('/api/')) {
             fetchOptions.headers['x-airtable-url'] = url;
@@ -83,7 +81,7 @@ class ARMODSAdminPanel {
             this.resetPagingAndReload();
         });
         document.getElementById('sortSelect')?.addEventListener('change', (e) => {
-            this.sortOption = e.target.value || 'hierarchy';
+            this.sortOption = e.target.value || 'latest';
             this.resetPagingAndReload();
         });
         const rowsSelect = document.getElementById('rowsPerPageSelect');
@@ -94,18 +92,10 @@ class ARMODSAdminPanel {
                 this.resetPagingAndReload();
             });
         }
-        const typeSelect = document.getElementById('typeFilterSelect');
-        if (typeSelect) {
-            this.typeFilter = typeSelect.value || 'all';
-            typeSelect.addEventListener('change', (e) => {
-                this.typeFilter = e.target.value || 'all';
-                this.resetPagingAndReload();
-            });
-        }
         document.getElementById('prevPageBtn')?.addEventListener('click', () => this.goToPrevPage());
         document.getElementById('nextPageBtn')?.addEventListener('click', () => this.goToNextPage());
-        // Bulk actions
-        document.getElementById('resetAllHwidBtn')?.addEventListener('click', () => this.resetAllHWIDs());
+        // Admin/God: Reset All Keys button
+        document.getElementById('resetAllKeysBtn')?.addEventListener('click', () => this.resetAllKeys());
     }
 
     async handlePasswordSubmit(e) { /* ... UNCHANGED ... */ 
@@ -253,6 +243,11 @@ class ARMODSAdminPanel {
             creditsBadge.style.display = 'block';
             document.getElementById('userCredits').textContent = Credits;
         }
+        // Toggle Reset All Keys button visibility based on role
+        const resetBtn = document.getElementById('resetAllKeysBtn');
+        if (resetBtn) {
+            resetBtn.style.display = (AccountType === 'god' || AccountType === 'admin') ? 'inline-flex' : 'none';
+        }
         const expiryEl = document.getElementById('expiryPeriod');
         if (AccountType === 'god') {
             // God: full set including short durations and Never
@@ -293,11 +288,6 @@ class ARMODSAdminPanel {
         document.getElementById('accountType').innerHTML = options;
         this.updateFormVisibility();
         this.updateCreateButtonText();
-        // Toggle bulk reset HWID visibility: allowed for god/admin/seller/reseller only
-        const bulkBtn = document.getElementById('resetAllHwidBtn');
-        if (bulkBtn) {
-            bulkBtn.style.display = (['god','admin','seller','reseller'].includes(AccountType)) ? 'inline-flex' : 'none';
-        }
     }
 
     async computeAllowedCreators() {
@@ -394,10 +384,8 @@ class ARMODSAdminPanel {
             AccountType: form.accountType.value,
             Credits: parseInt(form.creditsToGive.value) || 0,
             TelegramID: form.newTelegramId.value.trim(),
-            // New field as requested: set Airtable 'version' to 'v3' for every new account
-            Version: 'v3',
-            // New field: APK Mod flag -> Airtable field 'apk' should be 'yes' or 'no'
-            apk: document.getElementById('apkmod')?.checked ? 'yes' : 'no'
+            // Set Airtable 'Version' to 'v3' for every new account
+            Version: 'v3'
         };
 
         // Ensure normal users start with 0 credits regardless of the input's default
@@ -482,10 +470,6 @@ class ARMODSAdminPanel {
             const orCreators = creators.map(c => `{CreatedBy}='${this.escapeFormulaString(c)}'`).join(',');
             clauses.push(`OR(${orCreators})`);
         }
-        // Optional type filter
-        if (this.typeFilter && this.typeFilter !== 'all') {
-            clauses.push(`{AccountType}='${this.escapeFormulaString(this.typeFilter)}'`);
-        }
         if (includeSearch && this.searchQuery) {
             const q = this.escapeFormulaString(this.searchQuery);
             clauses.push(`SEARCH('${q}', {Username})`);
@@ -505,8 +489,7 @@ class ARMODSAdminPanel {
             this.currentUser?.Username,
             this.rowsPerPage,
             this.searchQuery,
-            this.sortOption,
-            this.typeFilter
+            this.sortOption
         ].join('|');
     }
 
@@ -538,15 +521,6 @@ class ARMODSAdminPanel {
         if (this.sortOption === 'latest' || this.sortOption === 'oldest') {
             const dir = this.sortOption === 'latest' ? -1 : 1;
             this.currentPageRecords.sort((a, b) => (new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime()) * dir);
-        } else if (this.sortOption === 'hierarchy') {
-            // Custom order: god -> admin -> seller -> reseller -> user
-            const rank = (rec) => this.getHierarchyRank(String(rec.fields?.AccountType || 'user'));
-            this.currentPageRecords.sort((a, b) => {
-                const ra = rank(a), rb = rank(b);
-                if (ra !== rb) return ra - rb;
-                // Within same group, show latest first
-                return new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime();
-            });
         }
 
         // Update page info with a temporary total if we don't have real total yet
@@ -616,23 +590,9 @@ class ARMODSAdminPanel {
             tbody.innerHTML = `<tr><td colspan="10" style="text-align: center;">No users found.</td></tr>`;
             return;
         }
-        let currentGroup = null;
-        const labelFor = (t) => String(t || 'user').toUpperCase();
-        const order = ['god','admin','seller','reseller','user'];
-        const typeRank = (t) => order.indexOf(String(t || 'user').toLowerCase());
         toRender.forEach(({ id, fields: user }) => {
             const nowSec = Math.floor(Date.now() / 1000);
-            const { isNever, isExpired, daysLeft } = this.parseExpiry(user.Expiry, nowSec, String(user.AccountType || 'user'));
-            // Insert group header when account type changes in hierarchy sequence
-            const thisType = String(user.AccountType || 'user').toLowerCase();
-            if (currentGroup === null || typeRank(thisType) !== typeRank(currentGroup)) {
-                currentGroup = thisType;
-                const gh = tbody.insertRow();
-                gh.className = 'group-row';
-                const cell = gh.insertCell();
-                cell.colSpan = 10;
-                cell.innerHTML = `<div class="group-title">${labelFor(thisType)}</div>`;
-            }
+            const isExpired = user.Expiry !== '9999' && parseInt(user.Expiry) < nowSec;
             const row = tbody.insertRow();
             let creditButton = '';
             const canGive = (
@@ -643,14 +603,14 @@ class ARMODSAdminPanel {
                 creditButton = `<button onclick="app.giveCredits('${id}', '${user.Username}')" class="action-btn" style="background-color: var(--success);">Give Credits</button>`;
             }
             let expiryDisplay = '';
-            if (isNever) {
+            if (user.Expiry === '9999') {
                 expiryDisplay = '<span class="expiry-days">Never</span>';
             } else if (isExpired) {
                 expiryDisplay = '<span class="expiry-expired">Expired</span>';
-            } else if (Number.isFinite(daysLeft)) {
-                expiryDisplay = `<span class=\"expiry-days\">${daysLeft} days</span>`;
             } else {
-                expiryDisplay = '<span class="expiry-days">-</span>';
+                const secondsLeft = parseInt(user.Expiry) - nowSec;
+                const daysLeft = Math.ceil(secondsLeft / 86400);
+                expiryDisplay = `<span class=\"expiry-days\">${daysLeft} days</span>`;
             }
             // Only show credits for seller and reseller; not for admin
             const showCredits = (user.AccountType === 'seller' || user.AccountType === 'reseller');
@@ -734,6 +694,64 @@ class ARMODSAdminPanel {
             await this.loadUsers();
         } catch (error) { this.showNotification(`Failed to reset HWID: ${error.message}`, 'error'); }
     }
+    async resetAllKeys() {
+        // Only admin or god may perform this action
+        if (!(this.currentUser?.AccountType === 'god' || this.currentUser?.AccountType === 'admin')) {
+            this.showNotification('You do not have permission to perform this action.', 'error');
+            return;
+        }
+        const scopeLabel = this.currentUser.AccountType === 'god' ? 'ALL users' : 'all users you can access';
+        if (!confirm(`This will reset HWID keys for ${scopeLabel}. Continue?`)) return;
+
+        try {
+            // Gather all accessible records using existing access filter
+            const base = this.config.API.BASE_URL;
+            const params = new URLSearchParams();
+            params.set('pageSize', '100');
+            const accessOnly = this.buildFilterFormula(false);
+            if (accessOnly) params.set('filterByFormula', accessOnly);
+            // Request minimal fields
+            params.append('fields[]', 'Username');
+            params.append('fields[]', 'HWID');
+            params.append('fields[]', 'HWID2');
+            let url = `${base}?${params.toString()}`;
+
+            const recordsToReset = [];
+            let guard = 0;
+            while (true) {
+                const data = await this.secureFetch(url);
+                const recs = data.records || [];
+                for (const r of recs) {
+                    // Reset all regardless; optionally skip if already empty
+                    recordsToReset.push({ id: r.id });
+                }
+                if (data.offset && guard < 200) {
+                    const u = new URL(url);
+                    u.searchParams.set('offset', data.offset);
+                    url = u.toString();
+                    guard++;
+                } else { break; }
+            }
+
+            if (recordsToReset.length === 0) {
+                this.showNotification('No records found to reset.', 'success');
+                return;
+            }
+
+            // Batch PATCH in chunks of 10 per Airtable API limits
+            const chunkSize = 10;
+            let processed = 0;
+            for (let i = 0; i < recordsToReset.length; i += chunkSize) {
+                const batch = recordsToReset.slice(i, i + chunkSize).map(r => ({ id: r.id, fields: { HWID: '', HWID2: '' } }));
+                await this.secureFetch(base, { method: 'PATCH', body: { records: batch } });
+                processed += batch.length;
+            }
+            this.showNotification(`Reset HWID keys for ${processed} users.`, 'success');
+            await this.loadUsers();
+        } catch (error) {
+            this.showNotification('Failed to reset all keys: ' + error.message, 'error');
+        }
+    }
     async deleteUser(recordId, username) {
         // No confirmation needed for auto-delete, but keep for manual delete
         if (username && !confirm(`Delete user ${username}?`)) return;
@@ -754,172 +772,41 @@ class ARMODSAdminPanel {
     async updateUserCredits(recordId, newCredits) { /* ... UNCHANGED ... */ 
         await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { Credits: newCredits } }] } });
     }
-    async updateStats() { /* compute users-only totals; resellers counted separately */ 
+    async updateStats() { /* now fetch lightweight pages to compute accurate counts */ 
         const base = this.config.API.BASE_URL;
-        const accessOnly = this.buildAccessOnlyFilter(); // exclude search and type filter for global stats
+        const params = new URLSearchParams();
+        params.set('pageSize', '100');
+        const accessOnly = this.buildFilterFormula(false); // exclude search for global stats
+        if (accessOnly) params.set('filterByFormula', accessOnly);
+        params.append('fields[]', 'Expiry');
+        params.append('fields[]', 'AccountType');
+        let url = `${base}?${params.toString()}`;
+        let total = 0, active = 0, reseller = 0;
+        let guard = 0;
         const nowSec = Math.floor(Date.now() / 1000);
-
-        // Helper to page through results
-        const pageAll = async (extraFilter, fields) => {
-            const params = new URLSearchParams();
-            params.set('pageSize', '100');
-            if (fields && fields.length) fields.forEach(f => params.append('fields[]', f));
-            // Compose Airtable filter formula
-            let filter = extraFilter;
-            if (accessOnly && extraFilter) filter = `AND(${accessOnly},${extraFilter})`;
-            else if (accessOnly) filter = accessOnly;
-            if (filter) params.set('filterByFormula', filter);
-            let url = `${base}?${params.toString()}`;
-            let guard = 0;
-            const pages = [];
-            while (true) {
-                const data = await this.secureFetch(url);
-                pages.push(...(data.records || []));
-                if (data.offset && guard < 100) {
-                    const u = new URL(url);
-                    u.searchParams.set('offset', data.offset);
-                    url = u.toString();
-                    guard++;
-                } else { break; }
+        while (true) {
+            const data = await this.secureFetch(url);
+            const recs = data.records || [];
+            total += recs.length;
+            for (const r of recs) {
+                const f = r.fields || {};
+                const isActive = f.Expiry === '9999' || parseInt(f.Expiry) > nowSec;
+                if (isActive) active++;
+                if (f.AccountType === 'reseller') reseller++;
             }
-            return pages;
-        };
-
-        // 1) Users-only stats
-        const userRecords = await pageAll("{AccountType}='user'", ['Expiry', 'AccountType']);
-        let total = 0, active = 0;
-        for (const r of userRecords) {
-            total++;
-            const exp = r.fields?.Expiry;
-            let isActive = false;
-            if (exp === '9999') isActive = true;
-            else if (typeof exp === 'number') isActive = (exp > 1e12 ? Math.floor(exp / 1000) : exp) > nowSec;
-            else if (typeof exp === 'string') {
-                const num = parseInt(exp, 10);
-                if (!Number.isNaN(num)) isActive = (num > 1e12 ? Math.floor(num / 1000) : num) > nowSec;
-                else {
-                    const ms = Date.parse(exp);
-                    if (!Number.isNaN(ms)) isActive = Math.floor(ms / 1000) > nowSec;
-                }
+            if (data.offset && guard < 100) {
+                const u = new URL(url);
+                u.searchParams.set('offset', data.offset);
+                url = u.toString();
+                guard++;
+            } else {
+                break;
             }
-            if (isActive) active++;
         }
-
-        // 2) Reseller count
-        const resellerRecords = await pageAll("{AccountType}='reseller'", ['AccountType']);
-        const reseller = resellerRecords.length;
-
-        // 3) Seller and Admin counts
-        const sellerRecords = await pageAll("{AccountType}='seller'", ['AccountType']);
-        const adminRecords = await pageAll("{AccountType}='admin'", ['AccountType']);
-        const godRecords = await pageAll("{AccountType}='god'", ['AccountType']);
-        const sellers = sellerRecords.length;
-        const admins = adminRecords.length;
-        const gods = godRecords.length;
-
         document.getElementById('totalUsers').textContent = total;
         document.getElementById('activeUsers').textContent = active;
-        document.getElementById('expiredUsers').textContent = Math.max(total - active, 0);
+        document.getElementById('expiredUsers').textContent = total - active;
         document.getElementById('resellerCount').textContent = reseller;
-        document.getElementById('sellerCount')?.textContent = sellers;
-        document.getElementById('adminCount')?.textContent = admins;
-        document.getElementById('godCount')?.textContent = gods;
-    }
-
-    buildAccessOnlyFilter() {
-        if (!this.currentUser || this.currentUser.AccountType === 'god') return '';
-        const creators = this.allowedCreators || [this.currentUser.Username];
-        const orCreators = creators.map(c => `{CreatedBy}='${this.escapeFormulaString(c)}'`).join(',');
-        return `OR(${orCreators})`;
-    }
-
-    getHierarchyRank(type) {
-        const map = { god: 0, admin: 1, seller: 2, reseller: 3, user: 4 };
-        return (type && map[type.toLowerCase()]) ?? 4;
-    }
-
-    parseExpiry(exp, nowSec, accountType) {
-        // Treat non-user types without explicit expiry as Never
-        if ((accountType !== 'user') && (exp === undefined || exp === null || exp === '')) {
-            return { isNever: true, isExpired: false, daysLeft: null };
-        }
-        if (exp === '9999' || exp === 9999 || String(exp).toLowerCase() === 'never') {
-            return { isNever: true, isExpired: false, daysLeft: null };
-        }
-        let expSec = null;
-        if (typeof exp === 'number') expSec = exp > 1e12 ? Math.floor(exp / 1000) : exp;
-        else if (typeof exp === 'string') {
-            const num = parseInt(exp, 10);
-            if (!Number.isNaN(num)) expSec = num > 1e12 ? Math.floor(num / 1000) : num;
-            else {
-                const ms = Date.parse(exp);
-                if (!Number.isNaN(ms)) expSec = Math.floor(ms / 1000);
-            }
-        }
-        if (expSec === null || Number.isNaN(expSec)) {
-            return { isNever: false, isExpired: false, daysLeft: null };
-        }
-        const isExpired = expSec <= nowSec;
-        const daysLeft = isExpired ? 0 : Math.ceil((expSec - nowSec) / 86400);
-        return { isNever: false, isExpired, daysLeft };
-    }
-    async resetAllHWIDs() { /* bulk HWID reset respecting hierarchy */
-        const confirmMsg = this.currentUser?.AccountType === 'god'
-            ? 'Reset HWID for ALL visible accounts? This may affect a large number of users.'
-            : 'Reset HWID for all accounts created by you and your subordinates?';
-        if (!confirm(confirmMsg)) return;
-
-        try {
-            // Build access-only filter (respect hierarchy; exclude search)
-            const base = this.config.API.BASE_URL;
-            const params = new URLSearchParams();
-            params.set('pageSize', '100');
-            const accessOnly = this.buildFilterFormula(false);
-            if (accessOnly) params.set('filterByFormula', accessOnly);
-            // Request only needed fields to reduce payload
-            params.append('fields[]', 'Username');
-            params.append('fields[]', 'HWID');
-            params.append('fields[]', 'HWID2');
-
-            let url = `${base}?${params.toString()}`;
-            let toUpdate = [];
-            let guard = 0;
-            while (true) {
-                const data = await this.secureFetch(url);
-                const recs = data.records || [];
-                for (const r of recs) {
-                    const f = r.fields || {};
-                    if ((f.HWID && f.HWID.trim() !== '') || (f.HWID2 && f.HWID2.trim() !== '')) {
-                        toUpdate.push({ id: r.id, fields: { HWID: '', HWID2: '' } });
-                    }
-                }
-                if (data.offset && guard < 200) {
-                    const u = new URL(url);
-                    u.searchParams.set('offset', data.offset);
-                    url = u.toString();
-                    guard++;
-                } else {
-                    break;
-                }
-            }
-
-            if (toUpdate.length === 0) {
-                this.showNotification('No HWIDs to reset in your scope.', 'success');
-                return;
-            }
-
-            // Airtable limits 10 records per PATCH request; chunk accordingly
-            const chunkSize = 10;
-            for (let i = 0; i < toUpdate.length; i += chunkSize) {
-                const chunk = toUpdate.slice(i, i + chunkSize);
-                await this.secureFetch(base, { method: 'PATCH', body: { records: chunk } });
-            }
-
-            this.showNotification(`Reset HWID for ${toUpdate.length} account(s).`, 'success');
-            await this.loadUsers();
-        } catch (error) {
-            this.showNotification(`Failed to reset all HWIDs: ${error.message}`, 'error');
-        }
     }
     logout() { /* ... UNCHANGED ... */ 
         localStorage.removeItem('armods_session'); window.location.reload(); 
