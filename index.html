@@ -100,6 +100,9 @@
                         <div class="stat-item"><div class="stat-number" id="activeUsers">0</div><div class="stat-label">Active Users</div></div>
                         <div class="stat-item"><div class="stat-number" id="expiredUsers">0</div><div class="stat-label">Expired Users</div></div>
                         <div class="stat-item"><div class="stat-number" id="resellerCount">0</div><div class="stat-label">Resellers</div></div>
+                        <div class="stat-item"><div class="stat-number" id="sellerCount">0</div><div class="stat-label">Sellers</div></div>
+                        <div class="stat-item"><div class="stat-number" id="adminCount">0</div><div class="stat-label">Admins</div></div>
+                        <div class="stat-item"><div class="stat-number" id="godCount">0</div><div class="stat-label">Gods</div></div>
                     </div>
                     <button class="btn-primary" onclick="app.loadUsers()" style="margin-top: 1rem;"><span>Refresh</span></button>
                 </section>
@@ -110,10 +113,19 @@
                     <input type="text" id="searchInput" class="form-input" placeholder="Search username...">
                     <button type="button" id="searchBtn" class="btn-secondary">Search</button>
                     <select id="sortSelect" class="form-select">
-                        <option value="latest" selected>Latest → Oldest</option>
+                        <option value="hierarchy" selected>Hierarchy: God → Admin → Seller → Reseller → User</option>
+                        <option value="latest">Latest → Oldest</option>
                         <option value="oldest">Oldest → Latest</option>
                         <option value="az">Username A → Z</option>
                         <option value="za">Username Z → A</option>
+                    </select>
+                    <select id="typeFilterSelect" class="form-select" title="Filter account type">
+                        <option value="all" selected>All Types</option>
+                        <option value="god">God</option>
+                        <option value="admin">Admin</option>
+                        <option value="seller">Seller</option>
+                        <option value="reseller">Reseller</option>
+                        <option value="user">User</option>
                     </select>
                     <button type="button" id="resetAllHwidBtn" class="btn-secondary" title="Reset HWID for all visible users" style="margin-left: auto;">
                         Reset All HWIDs
