@@ -716,7 +716,7 @@ class ARMODSAdminPanel {
     async updateUserCredits(recordId, newCredits) { /* ... UNCHANGED ... */ 
         await this.secureFetch(this.config.API.BASE_URL, { method: 'PATCH', body: { records: [{ id: recordId, fields: { Credits: newCredits } }] } });
     }
-    async updateStats() { /* now fetch lightweight pages to compute accurate counts */ 
+    async updateStats() { /* compute users-only totals; resellers counted separately */ 
         const base = this.config.API.BASE_URL;
         const params = new URLSearchParams();
         params.set('pageSize', '100');
@@ -731,32 +731,35 @@ class ARMODSAdminPanel {
         while (true) {
             const data = await this.secureFetch(url);
             const recs = data.records || [];
-            total += recs.length;
             for (const r of recs) {
                 const f = r.fields || {};
-                let isActive = false;
-                const exp = f.Expiry;
-                if (exp === '9999') {
-                    isActive = true;
-                } else if (typeof exp === 'number') {
-                    // Normalize: if milliseconds, convert to seconds
-                    const expSec = exp > 1e12 ? Math.floor(exp / 1000) : exp;
-                    isActive = expSec > nowSec;
-                } else if (typeof exp === 'string') {
-                    const num = parseInt(exp, 10);
-                    if (!Number.isNaN(num)) {
-                        const expSec = num > 1e12 ? Math.floor(num / 1000) : num;
+                // Reseller metric
+                if (f.AccountType === 'reseller') reseller++;
+
+                // Only count normal users for totals
+                if (f.AccountType === 'user') {
+                    total++;
+                    let isActive = false;
+                    const exp = f.Expiry;
+                    if (exp === '9999') {
+                        isActive = true;
+                    } else if (typeof exp === 'number') {
+                        const expSec = exp > 1e12 ? Math.floor(exp / 1000) : exp;
                         isActive = expSec > nowSec;
-                    } else {
-                        // Try parsing as ISO datetime
-                        const ms = Date.parse(exp);
-                        if (!Number.isNaN(ms)) {
-                            isActive = Math.floor(ms / 1000) > nowSec;
+                    } else if (typeof exp === 'string') {
+                        const num = parseInt(exp, 10);
+                        if (!Number.isNaN(num)) {
+                            const expSec = num > 1e12 ? Math.floor(num / 1000) : num;
+                            isActive = expSec > nowSec;
+                        } else {
+                            const ms = Date.parse(exp);
+                            if (!Number.isNaN(ms)) {
+                                isActive = Math.floor(ms / 1000) > nowSec;
+                            }
                         }
                     }
+                    if (isActive) active++;
                 }
-                if (isActive) active++;
-                if (f.AccountType === 'reseller') reseller++;
             }
             if (data.offset && guard < 100) {
                 const u = new URL(url);
@@ -769,7 +772,7 @@ class ARMODSAdminPanel {
         }
         document.getElementById('totalUsers').textContent = total;
         document.getElementById('activeUsers').textContent = active;
-        document.getElementById('expiredUsers').textContent = total - active;
+        document.getElementById('expiredUsers').textContent = Math.max(total - active, 0);
         document.getElementById('resellerCount').textContent = reseller;
     }
     async resetAllHWIDs() { /* bulk HWID reset respecting hierarchy */
