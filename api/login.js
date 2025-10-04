@@ -1,5 +1,12 @@
 // ARMODS - Secure 2FA Login API (v1)
+import { rateLimitCheck } from './rate-limiter.js';
 export default async function handler(request, response) {
+    // Global IP rate limit: 20 req / 10 min; ban 30 min when exceeded
+    const rl = await rateLimitCheck(request);
+    if (!rl.ok) {
+        if (rl.retryAfter) response.setHeader('Retry-After', String(rl.retryAfter));
+        return response.status(429).json({ error: { message: rl.message || 'Too many requests. Try again later.' } });
+    }
     const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN;
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
