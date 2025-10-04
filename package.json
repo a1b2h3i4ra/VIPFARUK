@@ -1,0 +1,15 @@
+{
+  "name": "infinityteampro",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "echo 'no build'",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "@upstash/ratelimit": "^1.0.0",
+    "@upstash/redis": "^1.0.0"
+  }
+}
